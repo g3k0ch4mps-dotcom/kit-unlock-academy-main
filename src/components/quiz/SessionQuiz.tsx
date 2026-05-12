@@ -55,6 +55,7 @@ export const SessionQuiz = ({
   const [result, setResult] = useState<QuizResult | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [previousAttempt, setPreviousAttempt] = useState<QuizResult | null>(null);
+  const [quizSource, setQuizSource] = useState<"predefined" | "ai">("ai");
 
   useEffect(() => {
     checkPreviousAttempt();
@@ -82,8 +83,30 @@ export const SessionQuiz = ({
       setResult(prev);
       setStep("results");
     } else {
-      generateQuiz();
+      loadQuiz();
     }
+  };
+
+  const loadQuiz = async () => {
+    setStep("loading");
+    // Try loading predefined quiz from session_quizzes first
+    const { data: predefined } = await supabase
+      .from("session_quizzes")
+      .select("questions")
+      .eq("session_id", sessionId)
+      .maybeSingle();
+
+    if (predefined && predefined.questions && Array.isArray(predefined.questions) && predefined.questions.length > 0) {
+      setQuestions(predefined.questions as QuizQuestion[]);
+      setQuizSource("predefined");
+      setCurrentQ(0);
+      setAnswers({});
+      setStep("quiz");
+      return;
+    }
+
+    // Fallback to AI generation
+    await generateQuiz();
   };
 
   const generateQuiz = async () => {
@@ -100,6 +123,7 @@ export const SessionQuiz = ({
       if (error) throw error;
       if (data.questions && data.questions.length > 0) {
         setQuestions(data.questions);
+        setQuizSource("ai");
         setCurrentQ(0);
         setAnswers({});
         setStep("quiz");
@@ -162,7 +186,7 @@ export const SessionQuiz = ({
   const handleRedo = () => {
     setResult(null);
     setPreviousAttempt(null);
-    generateQuiz();
+    loadQuiz();
   };
 
   if (step === "loading") {

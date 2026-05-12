@@ -277,8 +277,8 @@ export const ProgramView = () => {
     }
   };
 
-  const handleSessionClick = (sessionId: string, isLocked: boolean) => {
-    if (isLocked) return;
+  const handleSessionClick = (sessionId: string, isLocked: boolean, isGated?: boolean) => {
+    if (isLocked || isGated) return;
     if (!hasAssessment && user) {
       setPendingSessionId(sessionId);
       setIsAssessmentOpen(true);
@@ -405,23 +405,29 @@ export const ProgramView = () => {
             <h2 className="text-xl font-semibold mb-6">Sessions</h2>
             
             <div className="space-y-3">
-               {sessions.map((session, index) => {
-                 const SessionIcon = getSessionIcon("tutorial");
-                 const isCompleted = progressData.some(p => p.session_id === session.id && p.completed);
-                 const isLocked = !session.is_free && !hasAccess;
-                 const quizScore = sessionScores.find(s => s.session_id === session.id);
-                
+                {sessions.map((session, index) => {
+                  const SessionIcon = getSessionIcon("tutorial");
+                  const isCompleted = progressData.some(p => p.session_id === session.id && p.completed);
+                  const isLocked = !session.is_free && !hasAccess;
+                  // Progression gating: even with access, previous session must be completed
+                  const prevSession = index > 0 ? sessions[index - 1] : null;
+                  const isPrevCompleted = prevSession
+                    ? progressData.some(p => p.session_id === prevSession.id && p.completed)
+                    : true;
+                  const isGated = hasAccess && !session.is_free && !isCompleted && prevSession !== null && !isPrevCompleted;
+                  const quizScore = sessionScores.find(s => s.session_id === session.id);
+                 
                 return (
                   <div 
                     key={session.id}
                     className={`relative flex items-center gap-4 p-4 rounded-xl border transition-all ${
                        isCompleted 
-                        ? "bg-success/5 border-success/20 session-unlocked" 
-                        : isLocked 
-                          ? "bg-muted/50 border-border session-locked"
-                           : session.is_free
-                            ? "bg-accent/20 border-accent/30 session-free hover:border-accent"
-                            : "bg-card border-border session-unlocked hover:border-primary/30"
+                         ? "bg-success/5 border-success/20 session-unlocked" 
+                         : isLocked || isGated
+                           ? "bg-muted/50 border-border session-locked"
+                            : session.is_free
+                             ? "bg-accent/20 border-accent/30 session-free hover:border-accent"
+                             : "bg-card border-border session-unlocked hover:border-primary/30"
                     }`}
                   >
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
@@ -431,11 +437,11 @@ export const ProgramView = () => {
                           ? "bg-muted" 
                           : "bg-primary/10"
                     }`}>
-                       {isCompleted ? (
-                        <CheckCircle2 className="h-5 w-5 text-success" />
-                      ) : isLocked ? (
-                        <Lock className="h-5 w-5 text-muted-foreground" />
-                      ) : (
+                      {isCompleted ? (
+                         <CheckCircle2 className="h-5 w-5 text-success" />
+                       ) : isLocked || isGated ? (
+                         <Lock className="h-5 w-5 text-muted-foreground" />
+                       ) : (
                          <SessionIcon className={`h-5 w-5 ${session.is_free ? "text-accent-foreground" : "text-primary"}`} />
                       )}
                     </div>
@@ -469,15 +475,19 @@ export const ProgramView = () => {
                          {session.duration_minutes || 30} min
                       </span>
                       
-                      {!isLocked && (
-                        <Button 
-                           variant={isCompleted ? "ghost" : "default"} 
-                          size="sm"
-                          onClick={() => handleSessionClick(session.id, false)}
-                        >
-                           {isCompleted ? "Review" : "Start"}
-                        </Button>
-                      )}
+                      {isGated ? (
+                         <span className="text-xs text-muted-foreground text-center max-w-[100px] leading-tight">
+                           Complete previous session first
+                         </span>
+                       ) : !isLocked && (
+                         <Button 
+                            variant={isCompleted ? "ghost" : "default"} 
+                           size="sm"
+                           onClick={() => handleSessionClick(session.id, false, isGated)}
+                         >
+                            {isCompleted ? "Review" : "Start"}
+                         </Button>
+                       )}
                     </div>
                     
                     {/* Watermark for content protection */}

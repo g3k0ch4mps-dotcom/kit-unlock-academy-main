@@ -504,6 +504,44 @@ export type Database = {
           },
         ]
       }
+      session_quizzes: {
+        Row: {
+          created_at: string
+          id: string
+          passing_score: number
+          questions: Json
+          session_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          passing_score?: number
+          questions?: Json
+          session_id: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          passing_score?: number
+          questions?: Json
+          session_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_quizzes_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: true
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       sessions: {
         Row: {
           created_at: string

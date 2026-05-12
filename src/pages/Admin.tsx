@@ -14,8 +14,9 @@ import {
    BookOpen,
    FolderOpen,
    ClipboardCheck,
-   Award,
-   BarChart3,
+    Award,
+    BarChart3,
+    HelpCircle,
    Undo2,
    AlertTriangle
 } from "lucide-react";
@@ -29,6 +30,7 @@ import { SessionContentEditor, SessionContentEditorRef } from "@/components/admi
  import { ProgramManager } from "@/components/admin/ProgramManager";
  import { ProjectManager } from "@/components/admin/ProjectManager";
  import { TestManager } from "@/components/admin/TestManager";
+import { QuizBuilder } from "@/components/admin/QuizBuilder";
 import { ProgramAnalytics } from "@/components/admin/ProgramAnalytics";
 import { CertificateManager } from "@/components/admin/CertificateManager";
 
@@ -368,10 +370,14 @@ export const Admin = () => {
                 <Sparkles className="h-4 w-4" />
                 <span className="hidden sm:inline">AI</span>
               </TabsTrigger>
+               <TabsTrigger value="quizzes" className="flex items-center gap-2">
+                  <HelpCircle className="h-4 w-4" />
+                  <span className="hidden sm:inline">Quizzes</span>
+                </TabsTrigger>
                <TabsTrigger value="analytics" className="flex items-center gap-2">
-                 <BarChart3 className="h-4 w-4" />
-                 <span className="hidden sm:inline">Analytics</span>
-               </TabsTrigger>
+                  <BarChart3 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Analytics</span>
+                </TabsTrigger>
                <TabsTrigger value="certificates" className="flex items-center gap-2">
                  <Award className="h-4 w-4" />
                  <span className="hidden sm:inline">Certificates</span>
@@ -562,7 +568,13 @@ export const Admin = () => {
           </TabsContent>
 
           {/* Analytics Tab */}
-           <TabsContent value="analytics">
+          <TabsContent value="quizzes">
+             <div className="bg-card rounded-xl border border-border p-6">
+               <h2 className="text-xl font-semibold mb-6">Session Quiz Builder</h2>
+               <QuizBuilder />
+             </div>
+           </TabsContent>
+          <TabsContent value="analytics">
              <ProgramAnalytics />
            </TabsContent>
 
