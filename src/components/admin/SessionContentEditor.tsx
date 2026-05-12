@@ -501,7 +501,7 @@ export const SessionContentEditor = forwardRef<SessionContentEditorRef, SessionC
               duration_minutes: 30
             })
             .select()
-            .single();
+            .maybeSingle();
 
           if (sessionError || !newSession) {
             console.error("Error creating session:", sessionError);
@@ -1221,3 +1221,4 @@ export const SessionContentEditor = forwardRef<SessionContentEditorRef, SessionC
 SessionContentEditor.displayName = "SessionContentEditor";
 
 export default SessionContentEditor;
+

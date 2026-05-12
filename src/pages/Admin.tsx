@@ -136,8 +136,7 @@ export const Admin = () => {
         image_url: formData.image || null,
         difficulty_level: formData.difficulty_level
       })
-      .select()
-      .single();
+      .select().maybeSingle();
 
     if (error) {
       toast({
@@ -608,3 +607,4 @@ export const Admin = () => {
 };
 
 export default Admin;
+

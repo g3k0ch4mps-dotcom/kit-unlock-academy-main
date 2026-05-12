@@ -51,8 +51,7 @@ export const Profile = () => {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
-      .eq("user_id", user.id)
-      .single();
+      .eq("user_id", user.id).maybeSingle();
 
     if (error) {
       console.error("Error fetching profile:", error);
@@ -286,3 +285,4 @@ export const Profile = () => {
 };
 
 export default Profile;
+

@@ -86,8 +86,7 @@
      const { data, error } = await supabase
        .from("program_tests")
        .select("*")
-       .eq("id", testId)
-       .single();
+       .eq("id", testId).maybeSingle();
  
      if (error || !data) {
        toast({
@@ -120,11 +119,11 @@
            user_id: user.id,
            started_at: new Date().toISOString()
          })
-         .select()
-         .single();
-       
-       if (attempt) {
-         setAttemptId(attempt.id);
+          .select()
+          .maybeSingle();
+        
+        if (attempt) {
+          setAttemptId(attempt.id);
        }
      }
      
@@ -433,3 +432,4 @@
  };
  
  export default TestView;
+
