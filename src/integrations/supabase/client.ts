@@ -8,6 +8,8 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+const isDev = import.meta.env.DEV || import.meta.env.VITE_SUPABASE_MONITOR === "true";
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
@@ -15,3 +17,10 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+// Attach API call monitor in dev mode
+if (isDev) {
+  import("./monitor").then(({ enableSupabaseMonitor }) => {
+    enableSupabaseMonitor(supabase);
+  });
+}
