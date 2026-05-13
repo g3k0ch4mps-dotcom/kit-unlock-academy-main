@@ -66,8 +66,8 @@ void setup() {
 void loop() {
   // Runs repeatedly forever
   // Main program logic
-}',
-ses_id, 'text', 4, 'Installing — Step by Step',
+}'),
+(ses_id, 'text', 4, 'Installing — Step by Step',
  '1. Go to arduino.cc/en/software
 2. Download the version for your OS (Windows, macOS, Linux)
 3. Run the installer
