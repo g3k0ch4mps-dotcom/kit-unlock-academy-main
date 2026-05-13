@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import FingerprintJS from "@fingerprintjs/fingerprintjs";
 
 interface UserRole {
   role: "admin" | "instructor" | "learner";
@@ -53,12 +54,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
+    if (session?.user) {
+      recordDeviceFingerprint(session.user.id);
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       
       if (session?.user) {
+        recordDeviceFingerprint(session.user.id);
         supabase
           .from("user_roles")
           .select("role")
@@ -73,6 +79,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const recordDeviceFingerprint = async (userId: string) => {
+    try {
+      const fp = await FingerprintJS.load();
+      const result = await fp.get();
+      const fingerprint = result.visitorId;
+
+      const { data: existing } = await supabase
+        .from("user_devices")
+        .select("id, sign_in_count")
+        .eq("user_id", userId)
+        .eq("fingerprint", fingerprint)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from("user_devices")
+          .update({
+            last_sign_in_at: new Date().toISOString(),
+            sign_in_count: (existing.sign_in_count || 0) + 1,
+          })
+          .eq("id", existing.id);
+      } else {
+        const ua = navigator.userAgent;
+        let deviceLabel = "Unknown device";
+        if (/mobile|android|iphone/i.test(ua)) deviceLabel = "Mobile";
+        else if (/tablet|ipad/i.test(ua)) deviceLabel = "Tablet";
+        else deviceLabel = `Desktop (${/windows/i.test(ua) ? "Windows" : /mac/i.test(ua) ? "macOS" : /linux/i.test(ua) ? "Linux" : "Other"})`;
+
+        await supabase.from("user_devices").insert({
+          user_id: userId,
+          fingerprint,
+          device_label: deviceLabel,
+          last_sign_in_at: new Date().toISOString(),
+          sign_in_count: 1,
+        });
+      }
+    } catch (err) {
+      console.error("Device fingerprint error:", err);
+    }
+  };
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({

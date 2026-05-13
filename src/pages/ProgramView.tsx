@@ -277,9 +277,9 @@ export const ProgramView = () => {
     }
   };
 
-  const handleSessionClick = (sessionId: string, isLocked: boolean, isGated?: boolean) => {
+  const handleSessionClick = (sessionId: string, isLocked: boolean, isGated?: boolean, isFree?: boolean) => {
     if (isLocked || isGated) return;
-    if (!hasAssessment && user) {
+    if (!hasAssessment && user && !isFree) {
       setPendingSessionId(sessionId);
       setIsAssessmentOpen(true);
       return;
@@ -483,7 +483,7 @@ export const ProgramView = () => {
                          <Button 
                             variant={isCompleted ? "ghost" : "default"} 
                            size="sm"
-                           onClick={() => handleSessionClick(session.id, false, isGated)}
+                           onClick={() => handleSessionClick(session.id, false, isGated, session.is_free)}
                          >
                             {isCompleted ? "Review" : "Start"}
                          </Button>

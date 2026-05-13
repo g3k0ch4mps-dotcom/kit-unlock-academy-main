@@ -15,7 +15,12 @@ interface UserDevice {
   sign_in_count: number;
   is_revoked: boolean;
   created_at: string;
-  profiles: { email: string; full_name: string | null } | null;
+}
+
+interface UserProfile {
+  user_id: string;
+  email: string;
+  full_name: string | null;
 }
 
 const deviceIcon = (label: string) => {
@@ -28,6 +33,7 @@ const deviceIcon = (label: string) => {
 export const ActiveUsers = () => {
   const { toast } = useToast();
   const [devices, setDevices] = useState<UserDevice[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, UserProfile>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [revoking, setRevoking] = useState<string | null>(null);
 
@@ -37,11 +43,28 @@ export const ActiveUsers = () => {
 
   const fetchDevices = async () => {
     setIsLoading(true);
-    const { data } = await supabase
+    const { data: deviceData } = await supabase
       .from("user_devices")
-      .select("*, profiles:user_id(email, full_name)")
+      .select("*")
       .order("last_sign_in_at", { ascending: false });
-    if (data) setDevices(data as unknown as UserDevice[]);
+
+    const deviceList = (deviceData ?? []) as UserDevice[];
+    setDevices(deviceList);
+
+    if (deviceList.length > 0) {
+      const userIds = [...new Set(deviceList.map((d) => d.user_id))];
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("user_id, email, full_name")
+        .in("user_id", userIds);
+
+      const profileMap: Record<string, UserProfile> = {};
+      for (const p of (profileData ?? []) as UserProfile[]) {
+        profileMap[p.user_id] = p;
+      }
+      setProfiles(profileMap);
+    }
+
     setIsLoading(false);
   };
 
@@ -89,7 +112,7 @@ export const ActiveUsers = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{d.profiles?.email || "Unknown user"}</span>
+                    <span className="font-medium">{profiles[d.user_id]?.full_name || profiles[d.user_id]?.email || "Unknown user"}</span>
                     {d.is_revoked && <Badge variant="secondary" className="text-xs">Revoked</Badge>}
                   </div>
                   <p className="text-xs text-muted-foreground">
