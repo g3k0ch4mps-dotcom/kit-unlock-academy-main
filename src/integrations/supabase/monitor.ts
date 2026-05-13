@@ -87,6 +87,9 @@ export function enableSupabaseMonitor(supabase: any) {
 
   supabase.from = (table: string) => {
     const builder = originalFrom(table);
+
+    if (typeof builder?.then !== "function") return builder;
+
     const originalThen = builder.then.bind(builder);
 
     builder.then = (resolve: Function, reject?: Function) => {
@@ -100,14 +103,12 @@ export function enableSupabaseMonitor(supabase: any) {
           let error = null;
           let dataSize = 0;
 
-          // PostgREST responses carry status in various places
           if (result?.error) {
             status = result.error.status || result.error.code ? parseInt(result.error.code) : 500;
             error = result.error;
           } else if (result?.status !== undefined) {
             status = result.status;
           } else {
-            // Successful select returns the data array directly
             status = 200;
           }
 
@@ -117,7 +118,6 @@ export function enableSupabaseMonitor(supabase: any) {
             dataSize = result.data.length;
           }
 
-          // Detect method from the builder's internal state
           let method: QueryMethod = "select";
           if (builder._url) {
             const url = builder._url.toString();

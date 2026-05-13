@@ -18,6 +18,8 @@ import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
  import TestView from "./pages/TestView";
+import Store from "./pages/Store";
+import VerifyEmail from "./pages/VerifyEmail";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +36,7 @@ const App = () => (
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <Dashboard />
@@ -62,6 +65,11 @@ const App = () => (
             <Route path="/kits" element={
               <ProtectedRoute>
                 <Programs />
+              </ProtectedRoute>
+            } />
+            <Route path="/store" element={
+              <ProtectedRoute>
+                <Store />
               </ProtectedRoute>
             } />
             <Route path="/redeem" element={<Login />} />

@@ -1,7 +1,8 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Logo } from "./Logo";
-import { Menu, X, User, LogOut, Settings } from "lucide-react";
+import { Menu, X, User, LogOut, Settings, ShoppingBag } from "lucide-react";
+import { XPBadge } from "@/components/gamification/XPBadge";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -25,6 +26,7 @@ export const Header = () => {
         { href: "/dashboard", label: "Dashboard" },
         { href: "/kits", label: "My Kits" },
         { href: "/programs", label: "Programs" },
+        { href: "/store", label: "Store" },
       ]
     : [
         { href: "/#features", label: "Features" },
@@ -76,7 +78,9 @@ export const Header = () => {
         {/* Auth Buttons */}
         <div className="hidden md:flex items-center gap-3">
           {isAuthenticated ? (
-            <DropdownMenu>
+            <>
+              {user && <XPBadge userId={user.id} />}
+              <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm">
                   <User className="h-4 w-4 mr-2" />
@@ -105,6 +109,7 @@ export const Header = () => {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </>
           ) : (
             <>
               <Button variant="ghost" size="sm" asChild>

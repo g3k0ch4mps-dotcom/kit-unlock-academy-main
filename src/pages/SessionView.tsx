@@ -20,8 +20,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
  import { supabase } from "@/integrations/supabase/client";
- import { useAuth } from "@/contexts/AuthContext";
- import { ContentBlockRenderer } from "@/components/content/ContentBlockRenderer";
+import { useAuth } from "@/contexts/AuthContext";
+import { useXP } from "@/hooks/use-xp";
+import { useStreak } from "@/hooks/use-streak";
+import { ContentBlockRenderer } from "@/components/content/ContentBlockRenderer";
  import { SimulationEmbed } from "@/components/content/SimulationEmbed";
  import { SessionQuiz } from "@/components/quiz/SessionQuiz";
  
@@ -55,6 +57,8 @@ export const SessionView = () => {
   const { programId, sessionId } = useParams();
    const { user } = useAuth();
   const { toast } = useToast();
+  const { awardQuizXP, awardSessionXP } = useXP();
+  const { updateStreak } = useStreak(user?.id);
    const [session, setSession] = useState<SessionData | null>(null);
    const [program, setProgram] = useState<Program | null>(null);
    const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
@@ -209,26 +213,33 @@ export const SessionView = () => {
       }
     };
 
-   const markComplete = async () => {
-     if (!user || !sessionId) return;
-     
-     const { error } = await supabase
-       .from("session_progress")
-       .upsert({
-         user_id: user.id,
-         session_id: sessionId,
-         completed: true,
-         completed_at: new Date().toISOString(),
-         progress_percentage: 100,
-       }, { onConflict: "user_id,session_id" });
-     
-     if (!error) {
-       setIsMarkedComplete(true);
-       setShowQuiz(true);
+    const markComplete = async () => {
+      if (!user || !sessionId) return;
+      
+      const { error } = await supabase
+        .from("session_progress")
+        .upsert({
+          user_id: user.id,
+          session_id: sessionId,
+          completed: true,
+          completed_at: new Date().toISOString(),
+          progress_percentage: 100,
+        }, { onConflict: "user_id,session_id" });
+      
+      if (!error) {
+        setIsMarkedComplete(true);
+        setShowQuiz(true);
+        awardSessionXP(user.id, sessionId);
+        updateStreak();
     }
   };
 
-  const handleQuizComplete = (score: number) => {
+  const handleQuizComplete = async (score: number) => {
+    if (!user || !sessionId) return;
+    const passed = score >= 60;
+    if (passed) {
+      await awardXP(user.id, 10, "Passed session quiz", "session_quiz", sessionId);
+    }
     toast({
       title: `Quiz Score: ${score}%`,
       description: score >= 80 ? "Excellent work!" : "Keep practicing to improve your score.",

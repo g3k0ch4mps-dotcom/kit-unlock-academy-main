@@ -788,6 +788,267 @@ export type Database = {
         }
         Relationships: []
       }
+      user_devices: {
+        Row: {
+          created_at: string
+          device_label: string | null
+          fingerprint: string
+          id: string
+          ip_address: string | null
+          is_revoked: boolean | null
+          last_sign_in_at: string | null
+          sign_in_count: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_label?: string | null
+          fingerprint: string
+          id?: string
+          ip_address?: string | null
+          is_revoked?: boolean | null
+          last_sign_in_at?: string | null
+          sign_in_count?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_label?: string | null
+          fingerprint?: string
+          id?: string
+          ip_address?: string | null
+          is_revoked?: boolean | null
+          last_sign_in_at?: string | null
+          sign_in_count?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_xp: {
+        Row: {
+          id: string
+          user_id: string
+          total_xp: number
+          level: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          total_xp?: number
+          level?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          total_xp?: number
+          level?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      xp_transactions: {
+        Row: {
+          id: string
+          user_id: string
+          amount: number
+          reason: string
+          reference_type: string | null
+          reference_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          amount: number
+          reason: string
+          reference_type?: string | null
+          reference_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          amount?: number
+          reason?: string
+          reference_type?: string | null
+          reference_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      user_streaks: {
+        Row: {
+          id: string
+          user_id: string
+          current_streak: number
+          longest_streak: number
+          last_activity_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          current_streak?: number
+          longest_streak?: number
+          last_activity_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          current_streak?: number
+          longest_streak?: number
+          last_activity_date?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      daily_logins: {
+        Row: {
+          id: string
+          user_id: string
+          login_date: string
+          xp_awarded: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          login_date: string
+          xp_awarded?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          login_date?: string
+          xp_awarded?: number | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      badges: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          icon: string | null
+          xp_required: number | null
+          criteria: Json | null
+          is_active: boolean | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          icon?: string | null
+          xp_required?: number | null
+          criteria?: Json | null
+          is_active?: boolean | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          icon?: string | null
+          xp_required?: number | null
+          criteria?: Json | null
+          is_active?: boolean | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      user_badges: {
+        Row: {
+          id: string
+          user_id: string
+          badge_id: string
+          earned_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          badge_id: string
+          earned_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          badge_id?: string
+          earned_at?: string
+        }
+        Relationships: []
+      }
+      store_items: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          xp_cost: number
+          image_url: string | null
+          stock: number | null
+          is_active: boolean | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          xp_cost: number
+          image_url?: string | null
+          stock?: number | null
+          is_active?: boolean | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          xp_cost?: number
+          image_url?: string | null
+          stock?: number | null
+          is_active?: boolean | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      redemptions: {
+        Row: {
+          id: string
+          user_id: string
+          item_id: string
+          xp_spent: number
+          status: string
+          created_at: string
+          fulfilled_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          item_id: string
+          xp_spent: number
+          status?: string
+          created_at?: string
+          fulfilled_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          item_id?: string
+          xp_spent?: number
+          status?: string
+          created_at?: string
+          fulfilled_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

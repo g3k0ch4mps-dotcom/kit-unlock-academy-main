@@ -14,9 +14,11 @@ import {
    BookOpen,
    FolderOpen,
    ClipboardCheck,
-    Award,
-    BarChart3,
-    HelpCircle,
+     Award,
+     BarChart3,
+     Gift,
+     HelpCircle,
+     Monitor,
    Undo2,
    AlertTriangle
 } from "lucide-react";
@@ -31,6 +33,8 @@ import { SessionContentEditor, SessionContentEditorRef } from "@/components/admi
  import { ProjectManager } from "@/components/admin/ProjectManager";
  import { TestManager } from "@/components/admin/TestManager";
 import { QuizBuilder } from "@/components/admin/QuizBuilder";
+import { ActiveUsers } from "@/components/admin/ActiveUsers";
+import { StoreManager } from "@/components/admin/StoreManager";
 import { ProgramAnalytics } from "@/components/admin/ProgramAnalytics";
 import { CertificateManager } from "@/components/admin/CertificateManager";
 
@@ -374,10 +378,18 @@ export const Admin = () => {
                   <HelpCircle className="h-4 w-4" />
                   <span className="hidden sm:inline">Quizzes</span>
                 </TabsTrigger>
-               <TabsTrigger value="analytics" className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Analytics</span>
+               <TabsTrigger value="devices" className="flex items-center gap-2">
+                  <Monitor className="h-4 w-4" />
+                  <span className="hidden sm:inline">Devices</span>
                 </TabsTrigger>
+                <TabsTrigger value="store" className="flex items-center gap-2">
+                   <Gift className="h-4 w-4" />
+                   <span className="hidden sm:inline">Store</span>
+                 </TabsTrigger>
+                <TabsTrigger value="analytics" className="flex items-center gap-2">
+                   <BarChart3 className="h-4 w-4" />
+                   <span className="hidden sm:inline">Analytics</span>
+                 </TabsTrigger>
                <TabsTrigger value="certificates" className="flex items-center gap-2">
                  <Award className="h-4 w-4" />
                  <span className="hidden sm:inline">Certificates</span>
@@ -567,11 +579,23 @@ export const Admin = () => {
             />
           </TabsContent>
 
-          {/* Analytics Tab */}
-          <TabsContent value="quizzes">
+           <TabsContent value="store">
+              <div className="bg-card rounded-xl border border-border p-6">
+                <h2 className="text-xl font-semibold mb-6">XP Store Management</h2>
+                <StoreManager />
+              </div>
+            </TabsContent>
+           {/* Analytics Tab */}
+           <TabsContent value="quizzes">
              <div className="bg-card rounded-xl border border-border p-6">
                <h2 className="text-xl font-semibold mb-6">Session Quiz Builder</h2>
                <QuizBuilder />
+             </div>
+           </TabsContent>
+          <TabsContent value="devices">
+             <div className="bg-card rounded-xl border border-border p-6">
+               <h2 className="text-xl font-semibold mb-6">Active Devices</h2>
+               <ActiveUsers />
              </div>
            </TabsContent>
           <TabsContent value="analytics">

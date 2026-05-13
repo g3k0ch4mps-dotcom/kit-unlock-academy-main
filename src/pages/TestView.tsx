@@ -19,8 +19,9 @@
    Loader2
  } from "lucide-react";
  import { supabase } from "@/integrations/supabase/client";
- import { useAuth } from "@/contexts/AuthContext";
- import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { useXP } from "@/hooks/use-xp";
  
  interface Question {
    id: string;
@@ -43,8 +44,9 @@
  const TestView = () => {
    const { testId } = useParams();
    const navigate = useNavigate();
-   const { user } = useAuth();
-   const { toast } = useToast();
+    const { user } = useAuth();
+    const { toast } = useToast();
+    const { awardTestXP } = useXP();
    
    const [test, setTest] = useState<Test | null>(null);
    const [isLoading, setIsLoading] = useState(true);
@@ -185,9 +187,14 @@
  
        setTestResult({ score, passed, attemptId });
  
-       // If passed, generate certificate
-       if (passed) {
-         const { error } = await supabase.functions.invoke("generate-certificate", {
+        // Award XP if passed
+        if (passed) {
+          await awardTestXP(user.id, test.id, passed);
+        }
+
+        // If passed, generate certificate
+        if (passed) {
+          const { error } = await supabase.functions.invoke("generate-certificate", {
            body: {
              testAttemptId: attemptId,
              userId: user.id,
