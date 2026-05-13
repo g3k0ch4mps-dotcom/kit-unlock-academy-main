@@ -60,6 +60,7 @@ CREATE TABLE public.sessions (
   session_order INTEGER NOT NULL DEFAULT 1,
   is_free BOOLEAN DEFAULT false,
   duration_minutes INTEGER DEFAULT 30,
+  xp_cost INTEGER DEFAULT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
 );
@@ -82,6 +83,8 @@ CREATE TABLE public.unlock_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   code TEXT NOT NULL UNIQUE,
   program_id UUID REFERENCES public.programs(id) ON DELETE CASCADE,
+  kit_id UUID REFERENCES public.kits(id) ON DELETE CASCADE,
+  xp_reward INTEGER DEFAULT NULL,
   is_used BOOLEAN DEFAULT false,
   redeemed_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   redeemed_at TIMESTAMP WITH TIME ZONE,
@@ -89,7 +92,8 @@ CREATE TABLE public.unlock_codes (
   ip_address TEXT,
   expires_at TIMESTAMP WITH TIME ZONE,
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+  CONSTRAINT unlock_code_must_have_program_or_kit CHECK (program_id IS NOT NULL OR kit_id IS NOT NULL OR xp_reward IS NOT NULL)
 );
 
 CREATE TABLE public.user_program_access (
@@ -191,6 +195,7 @@ ALTER TABLE public.programs ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE public.programs ADD COLUMN IF NOT EXISTS total_sessions INTEGER DEFAULT 0;
 
 ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS simulation_url TEXT;
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS xp_cost INTEGER DEFAULT NULL;
 
 CREATE TABLE IF NOT EXISTS public.projects (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -250,7 +255,9 @@ CREATE TABLE IF NOT EXISTS public.certificates (
 );
 
 ALTER TABLE public.unlock_codes ADD COLUMN IF NOT EXISTS kit_id UUID REFERENCES public.kits(id) ON DELETE CASCADE;
-ALTER TABLE public.unlock_codes ADD CONSTRAINT unlock_code_must_have_program_or_kit CHECK (program_id IS NOT NULL OR kit_id IS NOT NULL);
+ALTER TABLE public.unlock_codes ADD COLUMN IF NOT EXISTS xp_reward INTEGER DEFAULT NULL;
+ALTER TABLE public.unlock_codes DROP CONSTRAINT IF EXISTS unlock_code_must_have_program_or_kit;
+ALTER TABLE public.unlock_codes ADD CONSTRAINT unlock_code_must_have_program_or_kit CHECK (program_id IS NOT NULL OR kit_id IS NOT NULL OR xp_reward IS NOT NULL);
 
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.program_tests ENABLE ROW LEVEL SECURITY;
