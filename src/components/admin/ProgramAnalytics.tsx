@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { BarChart3, Users, Brain, TrendingUp, Loader2 } from "lucide-react";
+import { BarChart3, Users, Brain, TrendingUp, Loader2, UserPlus, Calendar } from "lucide-react";
 
 interface Program {
   id: string;
@@ -31,15 +31,34 @@ export const ProgramAnalytics = () => {
   const [selectedProgram, setSelectedProgram] = useState("");
   const [assessmentStats, setAssessmentStats] = useState<AssessmentStats>({ total: 0, beginner: 0, intermediate: 0, advanced: 0, skipped: 0 });
   const [progressStats, setProgressStats] = useState<ProgressStats>({ totalLearners: 0, avgCompletion: 0, completedSessions: 0, totalSessions: 0 });
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [recentUsers, setRecentUsers] = useState<{ email: string; created_at: string }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     fetchPrograms();
+    fetchTotalUsers();
   }, []);
 
   useEffect(() => {
     if (selectedProgram) fetchAnalytics(selectedProgram);
   }, [selectedProgram]);
+
+  const fetchTotalUsers = async () => {
+    const { count } = await supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true });
+
+    setTotalUsers(count ?? 0);
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("email, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    setRecentUsers(data ?? []);
+  };
 
   const fetchPrograms = async () => {
     const { data } = await supabase.from("programs").select("id, title").order("title");
@@ -121,6 +140,39 @@ export const ProgramAnalytics = () => {
           <h2 className="text-xl font-bold">Program Analytics</h2>
           <p className="text-sm text-muted-foreground">Assessment onboarding effectiveness by skill level</p>
         </div>
+      </div>
+
+      {/* Registered Users Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <UserPlus className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-2xl font-bold">{totalUsers}</p>
+                <p className="text-sm text-muted-foreground">Total Registered Users</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        {recentUsers.length > 0 && (
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                Recent Registrations
+              </p>
+              <div className="space-y-1">
+                {recentUsers.map((u, i) => (
+                  <div key={i} className="text-xs text-muted-foreground flex justify-between">
+                    <span>{u.email}</span>
+                    <span>{new Date(u.created_at).toLocaleDateString()}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card>
