@@ -25,6 +25,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useXP } from "@/hooks/use-xp";
 
 interface RedeemCodeModalProps {
   isOpen: boolean;
@@ -104,6 +105,7 @@ export const RedeemCodeModal = ({
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { awardXP } = useXP();
   const [code, setCode] = useState("");
   const [state, setState] = useState<RedeemState>("idle");
   const [errorKind, setErrorKind] = useState<ErrorKind>("generic");
@@ -140,7 +142,7 @@ export const RedeemCodeModal = ({
       // 1. Look up the code
       const { data: unlockCode, error: findError } = await supabase
         .from("unlock_codes")
-        .select("id, program_id, kit_id, is_used, expires_at")
+        .select("id, program_id, kit_id, xp_reward, is_used, expires_at")
         .eq("code", normalizedCode)
         .maybeSingle();
 
@@ -223,23 +225,30 @@ export const RedeemCodeModal = ({
         return;
       }
 
-      // 5. Grant program access
-      const { error: accessError } = await supabase
-        .from("user_program_access")
-        .insert({
-          user_id: user.id,
-          program_id: programId,
-          unlock_code_id: unlockCode.id,
-        });
+      // 5a. Award XP if code has xp_reward
+      if (unlockCode.xp_reward) {
+        await awardXP(user.id, unlockCode.xp_reward, `Redeemed code: ${normalizedCode}`, "redeem_code", unlockCode.id);
+      }
 
-      if (accessError) {
-        console.error("Failed to grant access:", accessError);
-        setError("network");
-        return;
+      // 5b. Grant program access (if linked to a program)
+      if (programId) {
+        const { error: accessError } = await supabase
+          .from("user_program_access")
+          .insert({
+            user_id: user.id,
+            program_id: programId,
+            unlock_code_id: unlockCode.id,
+          });
+
+        if (accessError) {
+          console.error("Failed to grant access:", accessError);
+          setError("network");
+          return;
+        }
       }
 
       setRedeemedProgramId(programId);
-      setRedeemedProgramTitle(programTitle);
+      setRedeemedProgramTitle(programTitle || (unlockCode.xp_reward ? `+${unlockCode.xp_reward} XP` : ""));
       setState("success");
 
       // Notify parent so it can refresh state without full reload
@@ -291,20 +300,30 @@ export const RedeemCodeModal = ({
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-success/10 flex items-center justify-center">
               <CheckCircle2 className="h-8 w-8 text-success" />
             </div>
-            <DialogTitle className="mb-2 text-xl">Program Unlocked!</DialogTitle>
+            <DialogTitle className="mb-2 text-xl">
+              {redeemedProgramId ? "Program Unlocked!" : "XP Awarded!"}
+            </DialogTitle>
             <DialogDescription className="mb-2">
-              You now have full access to{" "}
-              <span className="font-semibold text-foreground">
-                {redeemedProgramTitle}
-              </span>
-              .
+              {redeemedProgramId ? (
+                <>You now have full access to{" "}
+                  <span className="font-semibold text-foreground">{redeemedProgramTitle}</span>.
+                </>
+              ) : (
+                <span className="font-semibold text-foreground text-lg">{redeemedProgramTitle}</span>
+              )}
             </DialogDescription>
             <p className="text-xs text-muted-foreground mb-6">
-              All sessions are now unlocked and ready for you.
+              {redeemedProgramId ? "All sessions are now unlocked and ready for you." : "The XP has been added to your account."}
             </p>
-            <Button variant="hero" onClick={handleStartLearning} className="w-full">
-              Start Learning →
-            </Button>
+            {redeemedProgramId ? (
+              <Button variant="hero" onClick={handleStartLearning} className="w-full">
+                Start Learning →
+              </Button>
+            ) : (
+              <Button variant="hero" onClick={handleClose} className="w-full">
+                Done
+              </Button>
+            )}
           </div>
         ) : state === "error" && !errorInfo.canRetry ? (
           /* ── Non-retryable Error State ── */

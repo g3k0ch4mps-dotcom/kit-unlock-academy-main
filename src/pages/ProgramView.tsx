@@ -20,13 +20,15 @@ import {
   Loader2,
   ClipboardCheck,
   Award,
-  Brain
+  Brain,
+  Zap
 } from "lucide-react";
 import { RedeemCodeModal } from "@/components/modals/RedeemCodeModal";
 import { AssessmentModal } from "@/components/assessment/AssessmentModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useXP } from "@/hooks/use-xp";
 
  interface ProgramData {
    id: string;
@@ -39,12 +41,13 @@ import { useToast } from "@/hooks/use-toast";
  }
  
  interface SessionData {
-   id: string;
-   title: string;
-   duration_minutes: number | null;
-   session_order: number;
-   is_free: boolean;
- }
+    id: string;
+    title: string;
+    duration_minutes: number | null;
+    session_order: number;
+    is_free: boolean;
+    xp_cost: number | null;
+  }
  
 interface SessionProgress {
   session_id: string;
@@ -81,6 +84,9 @@ export const ProgramView = () => {
   const { id } = useParams();
    const { user } = useAuth();
   const { toast } = useToast();
+  const { awardXP, getUserXP } = useXP();
+  const [userXP, setUserXP] = useState<number>(0);
+  const [unlockingSession, setUnlockingSession] = useState<string | null>(null);
   const [isRedeemModalOpen, setIsRedeemModalOpen] = useState(false);
   const [isAssessmentOpen, setIsAssessmentOpen] = useState(false);
   const [hasAssessment, setHasAssessment] = useState(false);
@@ -106,12 +112,19 @@ export const ProgramView = () => {
          checkAccess();
          fetchProgress();
          checkTestPassed();
-         checkAssessment();
-         fetchSessionScores();
-         checkCertificate();
-       }
-     }
-   }, [id, user]);
+          checkAssessment();
+          fetchSessionScores();
+          checkCertificate();
+          fetchUserXP();
+        }
+      }
+    }, [id, user]);
+
+    const fetchUserXP = async () => {
+      if (!user) return;
+      const xpData = await getUserXP(user.id);
+      setUserXP(xpData?.total_xp ?? 0);
+    };
  
    const fetchProgram = async () => {
      const { data } = await supabase
@@ -287,6 +300,39 @@ export const ProgramView = () => {
     window.location.href = `/programs/${program?.id}/session/${sessionId}`;
   };
 
+  const handleUnlockWithXP = async (sessionId: string, xpCost: number) => {
+    if (!user) return;
+    if (userXP < xpCost) {
+      toast({ title: "Not enough XP", description: `You need ${xpCost} XP to unlock this session.`, variant: "destructive" });
+      return;
+    }
+
+    setUnlockingSession(sessionId);
+
+    const newTotal = userXP - xpCost;
+    await supabase.from("user_xp").update({ total_xp: newTotal }).eq("user_id", user.id);
+    await supabase.from("xp_transactions").insert({
+      user_id: user.id,
+      amount: -xpCost,
+      reason: `Unlocked session`,
+      reference_type: "session",
+      reference_id: sessionId,
+    });
+
+    await supabase.from("session_progress").upsert({
+      user_id: user.id,
+      session_id: sessionId,
+      completed: false,
+      progress_percentage: 0,
+    }, { onConflict: "user_id,session_id" });
+
+    setUserXP(newTotal);
+    await fetchProgress();
+
+    toast({ title: "Session Unlocked!", description: `Spent ${xpCost} XP to unlock this session.` });
+    setUnlockingSession(null);
+  };
+
   const handleAssessmentComplete = (level: string) => {
     setHasAssessment(true);
     setUserSkillLevel(level);
@@ -407,6 +453,7 @@ export const ProgramView = () => {
             <div className="space-y-3">
                 {sessions.map((session, index) => {
                   const SessionIcon = getSessionIcon("tutorial");
+                  const hasProgress = progressData.some(p => p.session_id === session.id);
                   const isCompleted = progressData.some(p => p.session_id === session.id && p.completed);
                   const isLocked = !session.is_free && !hasAccess;
                   // Progression gating: even with access, previous session must be completed
@@ -415,6 +462,8 @@ export const ProgramView = () => {
                     ? progressData.some(p => p.session_id === prevSession.id && p.completed)
                     : true;
                   const isGated = hasAccess && !session.is_free && !isCompleted && prevSession !== null && !isPrevCompleted;
+                  // XP unlock: gated or locked sessions with xp_cost can be unlocked
+                  const canXpUnlock = (isLocked || isGated) && session.xp_cost && userXP >= session.xp_cost && !hasProgress;
                   const quizScore = sessionScores.find(s => s.session_id === session.id);
                  
                 return (
@@ -475,19 +524,34 @@ export const ProgramView = () => {
                          {session.duration_minutes || 30} min
                       </span>
                       
-                      {isGated ? (
-                         <span className="text-xs text-muted-foreground text-center max-w-[100px] leading-tight">
-                           Complete previous session first
-                         </span>
-                       ) : !isLocked && (
-                         <Button 
-                            variant={isCompleted ? "ghost" : "default"} 
-                           size="sm"
-                           onClick={() => handleSessionClick(session.id, false, isGated, session.is_free)}
-                         >
-                            {isCompleted ? "Review" : "Start"}
-                         </Button>
-                       )}
+                      {isGated && !canXpUnlock ? (
+                          <span className="text-xs text-muted-foreground text-center max-w-[100px] leading-tight">
+                            Complete previous session first
+                          </span>
+                        ) : canXpUnlock ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-yellow-500 text-yellow-600 hover:bg-yellow-50 gap-1"
+                            onClick={() => handleUnlockWithXP(session.id!, session.xp_cost!)}
+                            disabled={unlockingSession === session.id}
+                          >
+                            {unlockingSession === session.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Zap className="h-3 w-3" />
+                            )}
+                            Unlock ({session.xp_cost} XP)
+                          </Button>
+                        ) : !isLocked && !isGated && (
+                          <Button 
+                             variant={isCompleted ? "ghost" : "default"} 
+                            size="sm"
+                            onClick={() => handleSessionClick(session.id, false, isGated)}
+                          >
+                             {isCompleted ? "Review" : "Start"}
+                          </Button>
+                        )}
                     </div>
                     
                     {/* Watermark for content protection */}

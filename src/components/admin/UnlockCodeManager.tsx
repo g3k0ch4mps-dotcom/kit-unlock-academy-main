@@ -53,6 +53,7 @@ interface UnlockCode {
   id: string;
   code: string;
   program_id: string;
+  xp_reward: number | null;
   is_used: boolean;
   redeemed_by: string | null;
   redeemed_at: string | null;
@@ -73,6 +74,7 @@ export const UnlockCodeManager = () => {
   const [selectedProgram, setSelectedProgram] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
   const [expiresInDays, setExpiresInDays] = useState<number | null>(null);
+  const [xpReward, setXpReward] = useState<number | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -127,6 +129,7 @@ export const UnlockCodeManager = () => {
       newCodes.push({
         code: generateCode(),
         program_id: selectedProgram,
+        xp_reward: xpReward,
         expires_at: expiresAt,
         created_by: user.id,
       });
@@ -152,6 +155,7 @@ export const UnlockCodeManager = () => {
       setSelectedProgram("");
       setQuantity(1);
       setExpiresInDays(null);
+      setXpReward(null);
     }
 
     setIsGenerating(false);
@@ -311,6 +315,7 @@ export const UnlockCodeManager = () => {
               <TableRow>
                 <TableHead>Code</TableHead>
                 <TableHead>Program</TableHead>
+                <TableHead>XP Reward</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Expires</TableHead>
                 <TableHead>Created</TableHead>
@@ -328,6 +333,7 @@ export const UnlockCodeManager = () => {
                       </code>
                     </TableCell>
                     <TableCell>{code.program?.title || "Unknown"}</TableCell>
+                    <TableCell>{code.xp_reward ? <Badge variant="default" className="bg-yellow-600">{code.xp_reward} XP</Badge> : "—"}</TableCell>
                     <TableCell>
                       {code.is_used ? (
                         <Badge variant="secondary">Redeemed</Badge>
@@ -429,6 +435,19 @@ export const UnlockCodeManager = () => {
               </div>
               <p className="text-xs text-muted-foreground">
                 Leave empty for codes that never expire.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>XP Reward (optional)</Label>
+              <Input
+                type="number"
+                value={xpReward ?? ""}
+                onChange={(e) => setXpReward(e.target.value ? parseInt(e.target.value) : null)}
+                placeholder="No XP reward"
+                min={1}
+              />
+              <p className="text-xs text-muted-foreground">
+                If set, redeeming this code awards XP instead of (or in addition to) program access.
               </p>
             </div>
           </div>
