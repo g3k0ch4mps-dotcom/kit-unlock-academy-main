@@ -35,18 +35,27 @@ export function useXP() {
   const { toast } = useToast()
 
   const getUserXP = useCallback(async (userId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("user_xp")
       .select("*")
       .eq("user_id", userId)
       .maybeSingle()
 
+    if (error) {
+      console.error("getUserXP select error:", error)
+    }
+
     if (!data) {
-      const { data: inserted } = await supabase
+      const { data: inserted, error: insertError } = await supabase
         .from("user_xp")
         .insert({ user_id: userId })
         .select()
         .maybeSingle()
+
+      if (insertError) {
+        console.error("getUserXP insert error:", insertError)
+      }
+
       return inserted ?? { user_id: userId, total_xp: 0, level: 1 }
     }
     return data
@@ -63,20 +72,40 @@ export function useXP() {
     const newTotal = (xpData?.total_xp ?? 0) + amount
     const newLevel = calculateLevel(newTotal)
 
-    const { error: xpError } = await supabase
+    // First check if a row exists in the database
+    const { data: existing } = await supabase
       .from("user_xp")
-      .upsert({
-        user_id: userId,
-        total_xp: newTotal,
-        level: newLevel,
-      }, { onConflict: "user_id" })
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle()
+
+    let xpError;
+    if (existing) {
+      // Row exists → update
+      const result = await supabase
+        .from("user_xp")
+        .update({ total_xp: newTotal, level: newLevel })
+        .eq("user_id", userId)
+      xpError = result.error
+    } else {
+      // No row yet → insert
+      const result = await supabase
+        .from("user_xp")
+        .insert({ user_id: userId, total_xp: newTotal, level: newLevel })
+      xpError = result.error
+    }
 
     if (xpError) {
       console.error("Failed to award XP:", xpError)
+      toast({
+        title: "XP Error",
+        description: `${xpError.message || "unknown error"}`,
+        variant: "destructive",
+      })
       return
     }
 
-    await supabase
+    const { error: txError } = await supabase
       .from("xp_transactions")
       .insert({
         user_id: userId,
@@ -85,6 +114,16 @@ export function useXP() {
         reference_type: referenceType ?? null,
         reference_id: referenceId ?? null,
       })
+
+    if (txError) {
+      console.error("Failed to record XP transaction:", txError)
+      toast({
+        title: "XP Error",
+        description: `Transaction failed: ${txError.message}`,
+        variant: "destructive",
+      })
+      return
+    }
 
     toast({
       title: `+${amount} XP`,

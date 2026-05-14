@@ -554,6 +554,7 @@ export type Database = {
           simulation_url: string | null
           title: string
           updated_at: string
+          xp_cost: number | null
         }
         Insert: {
           created_at?: string
@@ -566,6 +567,7 @@ export type Database = {
           simulation_url?: string | null
           title: string
           updated_at?: string
+          xp_cost?: number | null
         }
         Update: {
           created_at?: string
@@ -578,6 +580,7 @@ export type Database = {
           simulation_url?: string | null
           title?: string
           updated_at?: string
+          xp_cost?: number | null
         }
         Relationships: [
           {

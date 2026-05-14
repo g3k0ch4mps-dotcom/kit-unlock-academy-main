@@ -46,8 +46,8 @@ BEGIN
 -- Session 0: Installing the Arduino IDE (FREE)
 -- ============================================================
 ses_id := 'c0000000-0000-0000-0000-000000000000';
-INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes)
-VALUES (ses_id, prog_id, 'Installing the Arduino IDE', 'Download, install, and configure the Arduino IDE. Learn about the COM port and board selection.', 0, true, 25)
+INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes, xp_cost)
+VALUES (ses_id, prog_id, 'Installing the Arduino IDE', 'Download, install, and configure the Arduino IDE. Learn about the COM port and board selection.', 0, true, 25, 0)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.content_blocks (session_id, block_type, block_order, title, content) VALUES
@@ -106,8 +106,8 @@ INSERT INTO public.session_quizzes (session_id, title, questions, passing_score)
 -- Session 1: Libraries & Serial Monitor (FREE)
 -- ============================================================
 ses_id := 'c0000000-0000-0000-0000-000000000001';
-INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes)
-VALUES (ses_id, prog_id, 'Libraries & Serial Monitor', 'Learn what Arduino libraries are, how to install them via the Library Manager, and how to use the Serial Monitor for debugging.', 1, true, 30)
+INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes, xp_cost)
+VALUES (ses_id, prog_id, 'Libraries & Serial Monitor', 'Learn what Arduino libraries are, how to install them via the Library Manager, and how to use the Serial Monitor for debugging.', 1, true, 30, 10)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.content_blocks (session_id, block_type, block_order, title, content) VALUES
@@ -165,8 +165,8 @@ INSERT INTO public.session_quizzes (session_id, title, questions, passing_score)
 -- Session 2: Blink — Built-in LED
 -- ============================================================
 ses_id := 'c0000000-0000-0000-0000-000000000002';
-INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes)
-VALUES (ses_id, prog_id, 'Blink — Built-in LED', 'Understand the setup()/loop() structure, digital output with pinMode() and digitalWrite(), and timing with delay(). Your first real Arduino program.', 2, false, 20)
+INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes, xp_cost)
+VALUES (ses_id, prog_id, 'Blink — Built-in LED', 'Understand the setup()/loop() structure, digital output with pinMode() and digitalWrite(), and timing with delay(). Your first real Arduino program.', 2, false, 20, 12)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.content_blocks (session_id, block_type, block_order, title, content) VALUES
@@ -224,8 +224,8 @@ INSERT INTO public.session_quizzes (session_id, title, questions, passing_score)
 -- Session 3: External LED + Resistor
 -- ============================================================
 ses_id := 'c0000000-0000-0000-0000-000000000003';
-INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes)
-VALUES (ses_id, prog_id, 'External LED + Resistor', 'Build your first circuit on a breadboard. Learn about LED polarity (anode vs cathode), resistor color codes, and Ohm''s Law.', 3, false, 35)
+INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes, xp_cost)
+VALUES (ses_id, prog_id, 'External LED + Resistor', 'Build your first circuit on a breadboard. Learn about LED polarity (anode vs cathode), resistor color codes, and Ohm''s Law.', 3, false, 35, 12)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.content_blocks (session_id, block_type, block_order, title, content) VALUES
@@ -282,8 +282,8 @@ INSERT INTO public.session_quizzes (session_id, title, questions, passing_score)
 -- Session 4: RGB LED
 -- ============================================================
 ses_id := 'c0000000-0000-0000-0000-000000000004';
-INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes)
-VALUES (ses_id, prog_id, 'RGB LED', 'Learn analog output with analogWrite() and PWM pins. Mix red, green, and blue to create millions of colors.', 4, false, 35)
+INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes, xp_cost)
+VALUES (ses_id, prog_id, 'RGB LED', 'Learn analog output with analogWrite() and PWM pins. Mix red, green, and blue to create millions of colors.', 4, false, 35, 15)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.content_blocks (session_id, block_type, block_order, title, content) VALUES
@@ -370,8 +370,8 @@ INSERT INTO public.session_quizzes (session_id, title, questions, passing_score)
 -- Session 5: Active Buzzer
 -- ============================================================
 ses_id := 'c0000000-0000-0000-0000-000000000005';
-INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes)
-VALUES (ses_id, prog_id, 'Active Buzzer', 'Generate sound with a DC-powered active buzzer. Learn the difference between active and passive buzzers.', 5, false, 20)
+INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes, xp_cost)
+VALUES (ses_id, prog_id, 'Active Buzzer', 'Generate sound with a DC-powered active buzzer. Learn the difference between active and passive buzzers.', 5, false, 20, 20)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.content_blocks (session_id, block_type, block_order, title, content) VALUES
@@ -418,8 +418,8 @@ INSERT INTO public.session_quizzes (session_id, title, questions, passing_score)
 -- Session 6: Passive Buzzer
 -- ============================================================
 ses_id := 'c0000000-0000-0000-0000-000000000006';
-INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes)
-VALUES (ses_id, prog_id, 'Passive Buzzer', 'Play melodies using the tone() function. Map frequencies to musical notes and never use analogWrite() on a buzzer.', 6, false, 30)
+INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes, xp_cost)
+VALUES (ses_id, prog_id, 'Passive Buzzer', 'Play melodies using the tone() function. Map frequencies to musical notes and never use analogWrite() on a buzzer.', 6, false, 30, 22)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.content_blocks (session_id, block_type, block_order, title, content) VALUES
@@ -500,8 +500,8 @@ INSERT INTO public.session_quizzes (session_id, title, questions, passing_score)
 -- Session 7: Tilt Switch
 -- ============================================================
 ses_id := 'c0000000-0000-0000-0000-000000000007';
-INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes)
-VALUES (ses_id, prog_id, 'Tilt Switch', 'Read digital input using INPUT_PULLUP. Understand how a tilt switch works and use it to detect orientation.', 7, false, 25)
+INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes, xp_cost)
+VALUES (ses_id, prog_id, 'Tilt Switch', 'Read digital input using INPUT_PULLUP. Understand how a tilt switch works and use it to detect orientation.', 7, false, 25, 25)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.content_blocks (session_id, block_type, block_order, title, content) VALUES
@@ -565,8 +565,8 @@ INSERT INTO public.session_quizzes (session_id, title, questions, passing_score)
 -- Session 8: RFID RC522
 -- ============================================================
 ses_id := 'c0000000-0000-0000-0000-000000000008';
-INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes)
-VALUES (ses_id, prog_id, 'RFID RC522', 'Read RFID card and tag UIDs using the RC522 module over SPI protocol. Learn about SPI wiring and the MFRC522 library.', 8, false, 40)
+INSERT INTO public.sessions (id, program_id, title, description, session_order, is_free, duration_minutes, xp_cost)
+VALUES (ses_id, prog_id, 'RFID RC522', 'Read RFID card and tag UIDs using the RC522 module over SPI protocol. Learn about SPI wiring and the MFRC522 library.', 8, false, 40, 28)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.content_blocks (session_id, block_type, block_order, title, content) VALUES

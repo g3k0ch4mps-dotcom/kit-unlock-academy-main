@@ -375,6 +375,8 @@ CREATE POLICY "Users can insert their own access" ON public.user_program_access 
 -- SESSION PROGRESS
 CREATE POLICY "Users can manage their own progress" ON public.session_progress FOR ALL TO authenticated
   USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Admins can manage all progress" ON public.session_progress FOR ALL TO authenticated
+  USING (public.is_admin_or_instructor(auth.uid())) WITH CHECK (public.is_admin_or_instructor(auth.uid()));
 
 -- PROFILES
 CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT TO authenticated USING (auth.uid() = user_id);

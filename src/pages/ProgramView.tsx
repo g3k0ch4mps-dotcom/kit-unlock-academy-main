@@ -290,47 +290,51 @@ export const ProgramView = () => {
     }
   };
 
-  const handleSessionClick = (sessionId: string, isLocked: boolean, isGated?: boolean, isFree?: boolean) => {
-    if (isLocked || isGated) return;
-    if (!hasAssessment && user && !isFree) {
+  const handleSessionClick = async (sessionId: string, isFree?: boolean) => {
+    if (!user || !program) return;
+
+    if (!hasAssessment && !isFree) {
       setPendingSessionId(sessionId);
       setIsAssessmentOpen(true);
       return;
     }
-    window.location.href = `/programs/${program?.id}/session/${sessionId}`;
-  };
 
-  const handleUnlockWithXP = async (sessionId: string, xpCost: number) => {
-    if (!user) return;
-    if (userXP < xpCost) {
-      toast({ title: "Not enough XP", description: `You need ${xpCost} XP to unlock this session.`, variant: "destructive" });
-      return;
+    const session = sessions.find(s => s.id === sessionId);
+    const xpCost = session?.xp_cost ?? 0;
+    const alreadyHasProgress = progressData.some(p => p.session_id === sessionId);
+
+    // Auto-deduct XP if the session costs XP and hasn't been unlocked yet
+    if (xpCost > 0 && !alreadyHasProgress) {
+      if (userXP < xpCost) {
+        toast({ title: "Not enough XP", description: `You need ${xpCost} XP to access this session.`, variant: "destructive" });
+        return;
+      }
+
+      setUnlockingSession(sessionId);
+      const newTotal = userXP - xpCost;
+      await supabase.from("user_xp").update({ total_xp: newTotal }).eq("user_id", user.id);
+      await supabase.from("xp_transactions").insert({
+        user_id: user.id,
+        amount: -xpCost,
+        reason: `Unlocked session: ${session?.title}`,
+        reference_type: "session",
+        reference_id: sessionId,
+      });
+      await supabase.from("session_progress").upsert({
+        user_id: user.id,
+        session_id: sessionId,
+        completed: false,
+        progress_percentage: 0,
+      }, { onConflict: "user_id,session_id" });
+
+      setUserXP(newTotal);
+      await fetchProgress();
+      setUnlockingSession(null);
+
+      toast({ title: `-${xpCost} XP`, description: `Unlocked "${session?.title}"` });
     }
 
-    setUnlockingSession(sessionId);
-
-    const newTotal = userXP - xpCost;
-    await supabase.from("user_xp").update({ total_xp: newTotal }).eq("user_id", user.id);
-    await supabase.from("xp_transactions").insert({
-      user_id: user.id,
-      amount: -xpCost,
-      reason: `Unlocked session`,
-      reference_type: "session",
-      reference_id: sessionId,
-    });
-
-    await supabase.from("session_progress").upsert({
-      user_id: user.id,
-      session_id: sessionId,
-      completed: false,
-      progress_percentage: 0,
-    }, { onConflict: "user_id,session_id" });
-
-    setUserXP(newTotal);
-    await fetchProgress();
-
-    toast({ title: "Session Unlocked!", description: `Spent ${xpCost} XP to unlock this session.` });
-    setUnlockingSession(null);
+    window.location.href = `/programs/${program.id}/session/${sessionId}`;
   };
 
   const handleAssessmentComplete = (level: string) => {
@@ -431,15 +435,20 @@ export const ProgramView = () => {
               <div className="flex-1">
                 <p className="text-muted-foreground mb-4">{program.description}</p>
                 
-                 {hasAccess && (
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Your Progress</span>
-                       <span className="font-semibold">{completedCount}/{sessions.length} sessions</span>
+                  {hasAccess && (
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between text-sm mb-2">
+                        <span className="text-muted-foreground">Your Progress</span>
+                         <span className="font-semibold">{completedCount}/{sessions.length} sessions</span>
+                      </div>
+                      <Progress value={progress} className="h-3" />
                     </div>
-                    <Progress value={progress} className="h-3" />
+                  )}
+                  <div className="flex items-center gap-2 text-sm">
+                    <Zap className="h-4 w-4 text-yellow-500" />
+                    <span className="font-semibold text-yellow-600">{userXP} XP</span>
+                    <span className="text-muted-foreground">available</span>
                   </div>
-                )}
               </div>
             </div>
           </div>
@@ -456,27 +465,33 @@ export const ProgramView = () => {
                   const hasProgress = progressData.some(p => p.session_id === session.id);
                   const isCompleted = progressData.some(p => p.session_id === session.id && p.completed);
                   const isLocked = !session.is_free && !hasAccess;
-                  // Progression gating: even with access, previous session must be completed
+                  const xpCost = session.xp_cost ?? 0;
+                  const alreadyUnlocked = hasProgress;
                   const prevSession = index > 0 ? sessions[index - 1] : null;
                   const isPrevCompleted = prevSession
                     ? progressData.some(p => p.session_id === prevSession.id && p.completed)
                     : true;
-                  const isGated = hasAccess && !session.is_free && !isCompleted && prevSession !== null && !isPrevCompleted;
-                  // XP unlock: gated or locked sessions with xp_cost can be unlocked
-                  const canXpUnlock = (isLocked || isGated) && session.xp_cost && userXP >= session.xp_cost && !hasProgress;
+                  // Blocked by previous session not completed
+                  const needsPrevGate = !alreadyUnlocked && !isPrevCompleted && !session.is_free && index > 0;
+                  // Needs XP unlock if: not locked by program access, has xp_cost, and not already started
+                  const needsXp = !isLocked && xpCost > 0 && !alreadyUnlocked;
+                  // Can afford XP unlock
+                  const canAfford = needsXp && userXP >= xpCost;
                   const quizScore = sessionScores.find(s => s.session_id === session.id);
-                 
+                  
                 return (
                   <div 
                     key={session.id}
                     className={`relative flex items-center gap-4 p-4 rounded-xl border transition-all ${
                        isCompleted 
                          ? "bg-success/5 border-success/20 session-unlocked" 
-                         : isLocked || isGated
+                         : isLocked
                            ? "bg-muted/50 border-border session-locked"
-                            : session.is_free
-                             ? "bg-accent/20 border-accent/30 session-free hover:border-accent"
-                             : "bg-card border-border session-unlocked hover:border-primary/30"
+                           : needsXp
+                             ? "bg-card border-yellow-200 hover:border-yellow-400"
+                             : session.is_free
+                              ? "bg-accent/20 border-accent/30 session-free hover:border-accent"
+                              : "bg-card border-border session-unlocked hover:border-primary/30"
                     }`}
                   >
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
@@ -488,7 +503,7 @@ export const ProgramView = () => {
                     }`}>
                       {isCompleted ? (
                          <CheckCircle2 className="h-5 w-5 text-success" />
-                       ) : isLocked || isGated ? (
+                       ) : isLocked ? (
                          <Lock className="h-5 w-5 text-muted-foreground" />
                        ) : (
                          <SessionIcon className={`h-5 w-5 ${session.is_free ? "text-accent-foreground" : "text-primary"}`} />
@@ -507,6 +522,11 @@ export const ProgramView = () => {
                       <h3 className={`font-medium ${isLocked ? "text-muted-foreground" : ""}`}>
                         {session.title}
                       </h3>
+                      {!isLocked && xpCost > 0 && (
+                        <p className={`text-xs mt-0.5 ${canAfford ? "text-yellow-600" : "text-destructive"}`}>
+                          Cost: {xpCost} XP · You have: {userXP} XP
+                        </p>
+                      )}
                     </div>
                     
                     <div className="flex items-center gap-3">
@@ -524,34 +544,34 @@ export const ProgramView = () => {
                          {session.duration_minutes || 30} min
                       </span>
                       
-                      {isGated && !canXpUnlock ? (
-                          <span className="text-xs text-muted-foreground text-center max-w-[100px] leading-tight">
-                            Complete previous session first
-                          </span>
-                        ) : canXpUnlock ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-yellow-500 text-yellow-600 hover:bg-yellow-50 gap-1"
-                            onClick={() => handleUnlockWithXP(session.id!, session.xp_cost!)}
-                            disabled={unlockingSession === session.id}
-                          >
-                            {unlockingSession === session.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Zap className="h-3 w-3" />
-                            )}
-                            Unlock ({session.xp_cost} XP)
-                          </Button>
-                        ) : !isLocked && !isGated && (
-                          <Button 
-                             variant={isCompleted ? "ghost" : "default"} 
-                            size="sm"
-                            onClick={() => handleSessionClick(session.id, false, isGated)}
-                          >
-                             {isCompleted ? "Review" : "Start"}
-                          </Button>
-                        )}
+                      {needsPrevGate ? (
+                        <span className="text-xs text-muted-foreground text-center max-w-[100px] leading-tight">
+                          Complete previous session first
+                        </span>
+                      ) : needsXp ? (
+                        <Button
+                          variant={canAfford ? "default" : "outline"}
+                          size="sm"
+                          className={canAfford ? "bg-yellow-600 hover:bg-yellow-700 gap-1" : "text-muted-foreground gap-1"}
+                          onClick={() => handleSessionClick(session.id, session.is_free)}
+                          disabled={!canAfford || unlockingSession === session.id}
+                        >
+                          {unlockingSession === session.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Zap className="h-3 w-3" />
+                          )}
+                          {canAfford ? `Start (${xpCost} XP)` : `Need ${xpCost} XP`}
+                        </Button>
+                      ) : !isLocked && (
+                        <Button 
+                           variant={isCompleted ? "ghost" : "default"} 
+                          size="sm"
+                          onClick={() => handleSessionClick(session.id, session.is_free)}
+                        >
+                           {isCompleted ? "Review" : "Start"}
+                        </Button>
+                      )}
                     </div>
                     
                     {/* Watermark for content protection */}

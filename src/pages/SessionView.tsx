@@ -15,7 +15,8 @@ import {
    Loader2,
    Brain,
    RefreshCw,
-   BookOpen
+   BookOpen,
+   RotateCcw
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -57,7 +58,7 @@ export const SessionView = () => {
   const { programId, sessionId } = useParams();
    const { user } = useAuth();
   const { toast } = useToast();
-  const { awardQuizXP, awardSessionXP } = useXP();
+  const { awardQuizXP, awardSessionXP, awardXP } = useXP();
   const { updateStreak } = useStreak(user?.id);
    const [session, setSession] = useState<SessionData | null>(null);
    const [program, setProgram] = useState<Program | null>(null);
@@ -65,6 +66,8 @@ export const SessionView = () => {
    const [adjacentSessions, setAdjacentSessions] = useState<{prev: SessionData | null, next: SessionData | null}>({prev: null, next: null});
    const [isLoading, setIsLoading] = useState(true);
    const [isMarkedComplete, setIsMarkedComplete] = useState(false);
+   const [isRetrying, setIsRetrying] = useState(false);
+   const [xpAwarded, setXpAwarded] = useState(false);
    const [personalizedMap, setPersonalizedMap] = useState<Record<string, string>>({});
    const [skillLevel, setSkillLevel] = useState<string | null>(null);
    const [isPersonalizing, setIsPersonalizing] = useState(false);
@@ -141,17 +144,28 @@ export const SessionView = () => {
        if (retryBlocks) setContentBlocks(retryBlocks);
      }
  
-     // Check if marked complete
-     if (user) {
-       const { data: progress } = await supabase
-         .from("session_progress")
-         .select("completed")
-         .eq("session_id", sessionId)
-         .eq("user_id", user.id)
-         .maybeSingle();
-       
-       setIsMarkedComplete(progress?.completed || false);
-     }
+      // Check if marked complete and XP already awarded
+      if (user) {
+        const { data: progress } = await supabase
+          .from("session_progress")
+          .select("completed")
+          .eq("session_id", sessionId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        
+        setIsMarkedComplete(progress?.completed || false);
+
+        // Check if XP was already awarded for this session
+        const { data: xpTx } = await supabase
+          .from("xp_transactions")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("reference_type", "session")
+          .eq("reference_id", sessionId)
+          .limit(1);
+
+        setXpAwarded(!!(xpTx && xpTx.length > 0));
+      }
      
       setIsLoading(false);
       
@@ -229,9 +243,31 @@ export const SessionView = () => {
       if (!error) {
         setIsMarkedComplete(true);
         setShowQuiz(true);
-        awardSessionXP(user.id, sessionId);
+        if (!xpAwarded) {
+          await awardSessionXP(user.id, sessionId);
+          setXpAwarded(true);
+        }
         updateStreak();
     }
+  };
+
+  const handleRetry = async () => {
+    if (!user || !sessionId) return;
+    setIsRetrying(true);
+    const { error } = await supabase
+      .from("session_progress")
+      .update({
+        completed: false,
+        completed_at: null,
+        progress_percentage: 0,
+      })
+      .eq("user_id", user.id)
+      .eq("session_id", sessionId);
+
+    if (!error) {
+      setIsMarkedComplete(false);
+    }
+    setIsRetrying(false);
   };
 
   const handleQuizComplete = async (score: number) => {
@@ -407,10 +443,18 @@ export const SessionView = () => {
                 <CheckCircle2 className="h-5 w-5 mr-2" />
                 Session Complete!
               </Button>
-              <div>
+              <div className="flex items-center justify-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => setShowQuiz(true)}>
                   <Brain className="h-4 w-4 mr-2" />
                   View / Redo Session Quiz
+                </Button>
+                <Button variant="ghost" size="sm" onClick={handleRetry} disabled={isRetrying}>
+                  {isRetrying ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                  )}
+                  Retry Session
                 </Button>
               </div>
             </div>

@@ -20,7 +20,8 @@ import {
      HelpCircle,
      Monitor,
    Undo2,
-   AlertTriangle
+   AlertTriangle,
+   Users
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,6 +38,7 @@ import { ActiveUsers } from "@/components/admin/ActiveUsers";
 import { StoreManager } from "@/components/admin/StoreManager";
 import { ProgramAnalytics } from "@/components/admin/ProgramAnalytics";
 import { CertificateManager } from "@/components/admin/CertificateManager";
+import { UserSessionManager } from "@/components/admin/UserSessionManager";
 
 export interface GeneratedSessionContent {
   sessionTitle: string;
@@ -378,11 +380,15 @@ export const Admin = () => {
                   <HelpCircle className="h-4 w-4" />
                   <span className="hidden sm:inline">Quizzes</span>
                 </TabsTrigger>
-               <TabsTrigger value="devices" className="flex items-center gap-2">
-                  <Monitor className="h-4 w-4" />
-                  <span className="hidden sm:inline">Devices</span>
-                </TabsTrigger>
-                <TabsTrigger value="store" className="flex items-center gap-2">
+                <TabsTrigger value="devices" className="flex items-center gap-2">
+                   <Monitor className="h-4 w-4" />
+                   <span className="hidden sm:inline">Devices</span>
+                 </TabsTrigger>
+                 <TabsTrigger value="users" className="flex items-center gap-2">
+                   <Users className="h-4 w-4" />
+                   <span className="hidden sm:inline">Users</span>
+                 </TabsTrigger>
+                 <TabsTrigger value="store" className="flex items-center gap-2">
                    <Gift className="h-4 w-4" />
                    <span className="hidden sm:inline">Store</span>
                  </TabsTrigger>
@@ -592,13 +598,18 @@ export const Admin = () => {
                <QuizBuilder />
              </div>
            </TabsContent>
-          <TabsContent value="devices">
-             <div className="bg-card rounded-xl border border-border p-6">
-               <h2 className="text-xl font-semibold mb-6">Active Devices</h2>
-               <ActiveUsers />
-             </div>
-           </TabsContent>
-          <TabsContent value="analytics">
+           <TabsContent value="devices">
+              <div className="bg-card rounded-xl border border-border p-6">
+                <h2 className="text-xl font-semibold mb-6">Active Devices</h2>
+                <ActiveUsers />
+              </div>
+            </TabsContent>
+           <TabsContent value="users">
+              <div className="bg-card rounded-xl border border-border p-6">
+                <UserSessionManager />
+              </div>
+            </TabsContent>
+           <TabsContent value="analytics">
              <ProgramAnalytics />
            </TabsContent>
 
