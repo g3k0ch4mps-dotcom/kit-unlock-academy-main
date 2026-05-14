@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Loader2, RotateCcw, CheckCircle2, XCircle, Users, BookOpen, ChevronRight, ChevronDown, Zap } from "lucide-react";
+import { Search, Loader2, RotateCcw, CheckCircle2, XCircle, Users, BookOpen, ChevronRight, ChevronDown } from "lucide-react";
 
 const LEVEL_THRESHOLDS = [
   { level: 1, xp: 0 },
@@ -72,7 +72,6 @@ export const UserSessionManager = () => {
   const [scoreMap, setScoreMap] = useState<Record<string, number>>({});
   const [isProgressLoading, setIsProgressLoading] = useState(false);
   const [resetting, setResetting] = useState<string | null>(null);
-  const [resettingXp, setResettingXp] = useState<string | null>(null);
   const [xpAwardedMap, setXpAwardedMap] = useState<Record<string, boolean>>({});
   const [expandedPrograms, setExpandedPrograms] = useState<Record<string, boolean>>({});
 
@@ -172,7 +171,8 @@ export const UserSessionManager = () => {
     if (!selectedUser) return;
     setResetting(sessionId);
 
-    const { error } = await supabase
+    // 1. Reset session progress
+    const { error: progressError } = await supabase
       .from("session_progress")
       .update({
         completed: false,
@@ -182,35 +182,20 @@ export const UserSessionManager = () => {
       .eq("user_id", selectedUser.user_id)
       .eq("session_id", sessionId);
 
-    if (error) {
+    if (progressError) {
       toast({ title: "Error", description: "Failed to reset session.", variant: "destructive" });
-    } else {
-      toast({ title: "Session Reset", description: `"${sessionTitle}" has been reset to incomplete.` });
-      if (selectedProgram) fetchUserProgress(selectedUser.user_id, selectedProgram);
+      setResetting(null);
+      return;
     }
 
-    setResetting(null);
-  };
-
-  const resetSessionXp = async (sessionId: string, sessionTitle: string) => {
-    if (!selectedUser) return;
-    setResettingXp(sessionId);
-
-    // Delete XP transactions for this session
-    const { error: delError } = await supabase
+    // 2. Delete XP transactions for this session and its quiz
+    await supabase
       .from("xp_transactions")
       .delete()
       .eq("user_id", selectedUser.user_id)
       .eq("reference_type", "session")
       .eq("reference_id", sessionId);
 
-    if (delError) {
-      toast({ title: "Error", description: "Failed to reset XP.", variant: "destructive" });
-      setResettingXp(null);
-      return;
-    }
-
-    // Also delete quiz XP transactions for this session
     await supabase
       .from("xp_transactions")
       .delete()
@@ -218,7 +203,7 @@ export const UserSessionManager = () => {
       .eq("reference_type", "session_quiz")
       .eq("reference_id", sessionId);
 
-    // Recalculate total XP from remaining transactions
+    // 3. Recalculate total XP from remaining transactions
     const { data: remaining } = await supabase
       .from("xp_transactions")
       .select("amount")
@@ -226,20 +211,16 @@ export const UserSessionManager = () => {
 
     const newTotal = (remaining ?? []).reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
 
-    const { error: updateError } = await supabase
+    await supabase
       .from("user_xp")
       .update({ total_xp: newTotal, level: calculateLevel(newTotal) })
       .eq("user_id", selectedUser.user_id);
 
-    if (updateError) {
-      toast({ title: "Error", description: "XP deleted but failed to update total.", variant: "destructive" });
-    } else {
-      toast({ title: "XP Reset", description: `Removed XP for "${sessionTitle}". Total: ${newTotal} XP.` });
-      setXpAwardedMap(prev => ({ ...prev, [sessionId]: false }));
-      if (selectedProgram) fetchUserProgress(selectedUser.user_id, selectedProgram);
-    }
+    setXpAwardedMap(prev => ({ ...prev, [sessionId]: false }));
+    if (selectedProgram) await fetchUserProgress(selectedUser.user_id, selectedProgram);
 
-    setResettingXp(null);
+    toast({ title: "Session Reset", description: `"${sessionTitle}" reset — XP removed. Total: ${newTotal} XP.` });
+    setResetting(null);
   };
 
   const filteredUsers = users.filter(u => {
@@ -471,7 +452,7 @@ export const UserSessionManager = () => {
                         className={isCompleted ? "text-destructive border-destructive/30 hover:bg-destructive/10" : "text-muted-foreground"}
                         onClick={() => resetSession(s.id, s.title)}
                         disabled={resetting === s.id || !isCompleted}
-                        title={isCompleted ? "Reset to incomplete" : "Already incomplete"}
+                        title={isCompleted ? "Reset session & XP" : "Already incomplete"}
                       >
                         {resetting === s.id ? (
                           <Loader2 className="h-3 w-3 animate-spin" />
@@ -480,23 +461,6 @@ export const UserSessionManager = () => {
                         )}
                         <span className="ml-1.5 text-xs">{isCompleted ? "Reset" : "—"}</span>
                       </Button>
-                      {isCompleted && xpAwardedMap[s.id] && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
-                          onClick={() => resetSessionXp(s.id, s.title)}
-                          disabled={resettingXp === s.id}
-                          title="Remove XP awarded for this session"
-                        >
-                          {resettingXp === s.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Zap className="h-3 w-3" />
-                          )}
-                          <span className="ml-1 text-xs">XP</span>
-                        </Button>
-                      )}
                     </div>
                   </div>
                 );

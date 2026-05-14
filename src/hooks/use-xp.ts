@@ -68,58 +68,19 @@ export function useXP() {
     referenceType?: string,
     referenceId?: string,
   ) => {
-    const xpData = await getUserXP(userId)
-    const newTotal = (xpData?.total_xp ?? 0) + amount
-    const newLevel = calculateLevel(newTotal)
+    const { data, error } = await supabase.rpc("award_xp", {
+      p_user_id: userId,
+      p_amount: amount,
+      p_reason: reason,
+      p_reference_type: referenceType ?? null,
+      p_reference_id: referenceId ?? null,
+    })
 
-    // First check if a row exists in the database
-    const { data: existing } = await supabase
-      .from("user_xp")
-      .select("id")
-      .eq("user_id", userId)
-      .maybeSingle()
-
-    let xpError;
-    if (existing) {
-      // Row exists → update
-      const result = await supabase
-        .from("user_xp")
-        .update({ total_xp: newTotal, level: newLevel })
-        .eq("user_id", userId)
-      xpError = result.error
-    } else {
-      // No row yet → insert
-      const result = await supabase
-        .from("user_xp")
-        .insert({ user_id: userId, total_xp: newTotal, level: newLevel })
-      xpError = result.error
-    }
-
-    if (xpError) {
-      console.error("Failed to award XP:", xpError)
+    if (error) {
+      console.error("award_xp RPC error:", error)
       toast({
         title: "XP Error",
-        description: `${xpError.message || "unknown error"}`,
-        variant: "destructive",
-      })
-      return
-    }
-
-    const { error: txError } = await supabase
-      .from("xp_transactions")
-      .insert({
-        user_id: userId,
-        amount,
-        reason,
-        reference_type: referenceType ?? null,
-        reference_id: referenceId ?? null,
-      })
-
-    if (txError) {
-      console.error("Failed to record XP transaction:", txError)
-      toast({
-        title: "XP Error",
-        description: `Transaction failed: ${txError.message}`,
+        description: error.message || "unknown error",
         variant: "destructive",
       })
       return
@@ -130,7 +91,7 @@ export function useXP() {
       description: reason,
     })
 
-    return { total_xp: newTotal, level: newLevel }
+    return data as { total_xp: number; level: number }
   }, [getUserXP, toast])
 
   const awardQuizXP = useCallback(async (

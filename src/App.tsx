@@ -19,6 +19,7 @@ import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
  import TestView from "./pages/TestView";
 import Store from "./pages/Store";
+import Redeem from "./pages/Redeem";
 import VerifyEmail from "./pages/VerifyEmail";
 
 const queryClient = new QueryClient();
@@ -72,7 +73,11 @@ const App = () => (
                 <Store />
               </ProtectedRoute>
             } />
-            <Route path="/redeem" element={<Login />} />
+            <Route path="/redeem" element={
+              <ProtectedRoute>
+                <Redeem />
+              </ProtectedRoute>
+            } />
             <Route path="/admin" element={
               <ProtectedRoute requireAdmin>
                 <Admin />

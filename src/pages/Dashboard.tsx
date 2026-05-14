@@ -14,7 +14,8 @@ import {
   Search,
   Key,
   Sparkles,
-  Clock
+  Clock,
+  Zap,
 } from "lucide-react";
 import { RedeemCodeModal } from "@/components/modals/RedeemCodeModal";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,13 +55,33 @@ export const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [enrolledPrograms, setEnrolledPrograms] = useState<EnrolledProgram[]>([]);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
+  const [userXP, setUserXP] = useState<{ total_xp: number; level: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
       fetchEnrolledPrograms();
       fetchRecentActivity();
+      fetchUserXP();
     }
+  }, [user]);
+
+  const fetchUserXP = async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from("user_xp")
+      .select("total_xp, level")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) console.error("Dashboard fetchUserXP error:", error);
+    if (data) setUserXP(data);
+  };
+
+  // Refresh XP data when returning to this page
+  useEffect(() => {
+    const handleFocus = () => fetchUserXP();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, [user]);
 
   const fetchEnrolledPrograms = async () => {
@@ -264,7 +285,7 @@ export const Dashboard = () => {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-card rounded-xl p-6 border border-border">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -298,6 +319,21 @@ export const Dashboard = () => {
               <div>
                 <p className="text-2xl font-bold">{enrolledPrograms.length}</p>
                 <p className="text-sm text-muted-foreground">Unlocked</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-card rounded-xl p-6 border border-border">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-lg bg-yellow-500/10 flex items-center justify-center">
+                <Zap className="h-6 w-6 text-yellow-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">
+                  {userXP !== null ? `${userXP.total_xp}` : "—"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {userXP !== null ? `Level ${userXP.level} XP` : "XP Points"}
+                </p>
               </div>
             </div>
           </div>
