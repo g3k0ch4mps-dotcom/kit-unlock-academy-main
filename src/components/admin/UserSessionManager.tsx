@@ -8,27 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Loader2, RotateCcw, CheckCircle2, XCircle, Users, BookOpen, ChevronRight, ChevronDown } from "lucide-react";
 
-const LEVEL_THRESHOLDS = [
-  { level: 1, xp: 0 },
-  { level: 2, xp: 50 },
-  { level: 3, xp: 150 },
-  { level: 4, xp: 300 },
-  { level: 5, xp: 500 },
-  { level: 6, xp: 800 },
-  { level: 7, xp: 1200 },
-  { level: 8, xp: 1700 },
-  { level: 9, xp: 2300 },
-  { level: 10, xp: 3000 },
-];
-
-function calculateLevel(totalXp: number): number {
-  let level = 1;
-  for (const t of LEVEL_THRESHOLDS) {
-    if (totalXp >= t.xp) level = t.level;
-  }
-  return level;
-}
-
 interface Profile {
   user_id: string;
   email: string;
@@ -188,33 +167,18 @@ export const UserSessionManager = () => {
       return;
     }
 
-    // 2. Delete XP transactions for this session and its quiz
-    await supabase
-      .from("xp_transactions")
-      .delete()
-      .eq("user_id", selectedUser.user_id)
-      .eq("reference_type", "session")
-      .eq("reference_id", sessionId);
+    // 2. Reset XP via RPC (bypasses RLS)
+    const { data: xpResult, error: xpError } = await supabase
+      .rpc("reset_session_xp", {
+        p_user_id: selectedUser.user_id,
+        p_session_id: sessionId,
+      });
 
-    await supabase
-      .from("xp_transactions")
-      .delete()
-      .eq("user_id", selectedUser.user_id)
-      .eq("reference_type", "session_quiz")
-      .eq("reference_id", sessionId);
+    if (xpError) {
+      console.error("reset_session_xp RPC error:", xpError);
+    }
 
-    // 3. Recalculate total XP from remaining transactions
-    const { data: remaining } = await supabase
-      .from("xp_transactions")
-      .select("amount")
-      .eq("user_id", selectedUser.user_id);
-
-    const newTotal = (remaining ?? []).reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
-
-    await supabase
-      .from("user_xp")
-      .update({ total_xp: newTotal, level: calculateLevel(newTotal) })
-      .eq("user_id", selectedUser.user_id);
+    const newTotal = (xpResult as { total_xp?: number })?.total_xp ?? 0;
 
     setXpAwardedMap(prev => ({ ...prev, [sessionId]: false }));
     if (selectedProgram) await fetchUserProgress(selectedUser.user_id, selectedProgram);
