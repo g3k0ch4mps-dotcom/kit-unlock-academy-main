@@ -315,10 +315,10 @@ export const Dashboard = () => {
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {userXP !== null ? `${userXP.total_xp}` : "—"}
+                  {userXP ? `${userXP.total_xp}` : "—"}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {userXP !== null ? `Level ${userXP.level} XP` : "XP Points"}
+                  {userXP ? `Level ${userXP.level} XP` : "XP Points"}
                 </p>
               </div>
             </div>
