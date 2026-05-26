@@ -123,6 +123,7 @@ const ImageUpload = ({ currentImage, onImageChange }: ImageUploadProps) => {
               variant="destructive"
               className="absolute top-2 right-2 h-8 w-8"
               onClick={handleRemoveImage}
+              aria-label="Remove image"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -180,6 +181,7 @@ const ImageUpload = ({ currentImage, onImageChange }: ImageUploadProps) => {
             size="icon"
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
+            aria-label="Upload image"
           >
             <ImageIcon className="h-4 w-4" />
           </Button>

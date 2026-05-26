@@ -294,6 +294,7 @@ export const QuizBuilder = () => {
                       size="icon"
                       onClick={() => removeQuestion(q.id)}
                       className="text-destructive hover:text-destructive"
+                      aria-label="Remove question"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

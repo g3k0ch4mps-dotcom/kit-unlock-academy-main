@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -104,168 +104,103 @@ export const ProgramView = () => {
    const [isGeneratingCert, setIsGeneratingCert] = useState(false);
  
   useEffect(() => {
-    if (id) {
-      fetchProgram();
-      fetchSessions();
-       fetchProgramTest();
-       if (user) {
-         checkAccess();
-         fetchProgress();
-         checkTestPassed();
-          checkAssessment();
-          fetchSessionScores();
-          checkCertificate();
-          fetchUserXP();
+    if (!id) return;
+
+    const fetchAll = async () => {
+      setIsLoading(true);
+
+      const [programResult, sessionsResult, programTestResult] = await Promise.all([
+        supabase.from("programs").select("*").eq("id", id).maybeSingle(),
+        supabase.from("sessions").select("*").eq("program_id", id).order("session_order"),
+        supabase.from("program_tests").select("id, title, passing_score").eq("program_id", id).maybeSingle(),
+      ]);
+
+      if (programResult.data) setProgram(programResult.data);
+      if (sessionsResult.data) setSessions(sessionsResult.data);
+      if (programTestResult.data) setProgramTest(programTestResult.data);
+
+      if (user) {
+        const [accessResult, progressResult, passedResult, assessmentResult, scoresResult, certResult, xpData] = await Promise.all([
+          supabase.from("user_program_access").select("id").eq("program_id", id).eq("user_id", user.id).maybeSingle(),
+          supabase.from("session_progress").select("session_id, completed").eq("user_id", user.id),
+          supabase.from("test_attempts").select("passed, program_tests!inner(program_id)").eq("user_id", user.id).eq("passed", true).eq("program_tests.program_id", id).limit(1),
+          supabase.from("user_assessments").select("skill_level").eq("user_id", user.id).eq("program_id", id).maybeSingle(),
+          supabase.from("session_quiz_attempts").select("session_id, score").eq("user_id", user.id).eq("program_id", id).order("score", { ascending: false }),
+          supabase.from("certificates").select("id").eq("user_id", user.id).eq("program_id", id).limit(1),
+          getUserXP(user.id),
+        ]);
+
+        setHasAccess(!!accessResult.data);
+        if (progressResult.data) setProgressData(progressResult.data);
+        setHasPassed(!!(passedResult.data && passedResult.data.length > 0));
+        setHasCertificate(!!(certResult.data && certResult.data.length > 0));
+
+        if (assessmentResult.data) {
+          setHasAssessment(true);
+          setUserSkillLevel(assessmentResult.data.skill_level);
         }
+
+        if (scoresResult.data) {
+          const bestScores: Record<string, number> = {};
+          for (const d of scoresResult.data as { session_id: string; score: number }[]) {
+            if (!bestScores[d.session_id] || d.score > bestScores[d.session_id]) {
+              bestScores[d.session_id] = d.score;
+            }
+          }
+          setSessionScores(Object.entries(bestScores).map(([session_id, score]) => ({ session_id, score })));
+        }
+
+        setUserXP(xpData?.total_xp ?? 0);
       }
-    }, [id, user]);
 
-    const fetchUserXP = async () => {
-      if (!user) return;
-      const xpData = await getUserXP(user.id);
-      setUserXP(xpData?.total_xp ?? 0);
+      setIsLoading(false);
     };
- 
-   const fetchProgram = async () => {
-     const { data } = await supabase
-       .from("programs")
-       .select("*")
-       .eq("id", id)
-       .maybeSingle();
-     
-     if (data) {
-       setProgram(data);
-     }
-     setIsLoading(false);
-   };
- 
-   const fetchSessions = async () => {
-     const { data } = await supabase
-       .from("sessions")
-       .select("*")
-       .eq("program_id", id)
-       .order("session_order");
-     
-     if (data) {
-       setSessions(data);
-     }
-   };
- 
-   const checkAccess = async () => {
-     if (!user) return;
-     const { data } = await supabase
-       .from("user_program_access")
-       .select("id")
-       .eq("program_id", id)
-       .eq("user_id", user.id)
-       .maybeSingle();
-     
-     setHasAccess(!!data);
-   };
- 
-  const fetchProgress = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("session_progress")
-      .select("session_id, completed")
-      .eq("user_id", user.id);
-    
-    if (data) {
-      setProgressData(data);
-    }
-  };
 
-  const fetchProgramTest = async () => {
-    const { data } = await supabase
-      .from("program_tests")
-      .select("id, title, passing_score")
-      .eq("program_id", id)
-      .maybeSingle();
-    
-    if (data) {
-      setProgramTest(data);
-    }
-  };
+    fetchAll();
+  }, [id, user]);
 
-  const checkTestPassed = async () => {
-    if (!user || !id) return;
-    
-    const { data } = await supabase
-      .from("test_attempts")
-      .select("passed, program_tests!inner(program_id)")
-      .eq("user_id", user.id)
-      .eq("passed", true)
-      .eq("program_tests.program_id", id)
-      .limit(1);
-    
-    if (data && data.length > 0) {
-      setHasPassed(true);
-    }
-  };
+  const averageScore = useMemo(() =>
+    sessionScores.length > 0
+      ? Math.round(sessionScores.reduce((sum, s) => sum + s.score, 0) / sessionScores.length)
+      : 0,
+    [sessionScores]
+  );
 
-  const fetchSessionScores = async () => {
-    if (!user || !id) return;
-    // Get best score per session for this program
-    const { data } = await supabase
-      .from("session_quiz_attempts")
-      .select("session_id, score")
-      .eq("user_id", user.id)
-      .eq("program_id", id)
-      .order("score", { ascending: false });
+  const completedCount = useMemo(() =>
+    progressData.filter(p => p.completed && sessions.some(s => s.id === p.session_id)).length,
+    [progressData, sessions]
+  );
 
-    if (data) {
-      // Keep best score per session
-      const bestScores: Record<string, number> = {};
-      data.forEach((d: any) => {
-        if (!bestScores[d.session_id] || d.score > bestScores[d.session_id]) {
-          bestScores[d.session_id] = d.score;
-        }
-      });
-      setSessionScores(
-        Object.entries(bestScores).map(([session_id, score]) => ({ session_id, score }))
-      );
-    }
-  };
+  const progress = useMemo(() =>
+    sessions.length > 0 ? (completedCount / sessions.length) * 100 : 0,
+    [completedCount, sessions.length]
+  );
 
-  const checkCertificate = async () => {
-    if (!user || !id) return;
-    const { data } = await supabase
-      .from("certificates")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("program_id", id)
-      .limit(1);
-    setHasCertificate(!!(data && data.length > 0));
-  };
+  const allSessionsCompleted = useMemo(() =>
+    sessions.length > 0 && completedCount === sessions.length,
+    [sessions.length, completedCount]
+  );
 
-  const averageScore = sessionScores.length > 0
-    ? Math.round(sessionScores.reduce((sum, s) => sum + s.score, 0) / sessionScores.length)
-    : 0;
-
-  const completedCount = progressData.filter(p => p.completed && sessions.some(s => s.id === p.session_id)).length;
-  const progress = sessions.length > 0 ? (completedCount / sessions.length) * 100 : 0;
-  const allSessionsCompleted = sessions.length > 0 && completedCount === sessions.length;
-
-  const canGetCertificate = allSessionsCompleted && sessionScores.length === sessions.length && !hasCertificate;
+  const canGetCertificate = useMemo(() =>
+    allSessionsCompleted && sessionScores.length === sessions.length && !hasCertificate,
+    [allSessionsCompleted, sessionScores.length, sessions.length, hasCertificate]
+  );
 
   const generateCertificate = async () => {
     if (!user || !id || !program) return;
     setIsGeneratingCert(true);
     try {
-      const certType = averageScore >= 80 ? "completion" : "participation";
       const { error } = await supabase.functions.invoke("generate-certificate", {
         body: {
           userId: user.id,
           programId: id,
-          score: averageScore,
-          certificateType: certType,
         },
       });
       if (!error) {
         setHasCertificate(true);
         toast({
           title: "Certificate Generated!",
-          description: `Your certificate of ${certType} is now available in your profile.`,
+          description: `Your certificate is now available in your profile.`,
         });
       }
     } catch {

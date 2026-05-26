@@ -37,7 +37,7 @@ export function useXP() {
   const getUserXP = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from("user_xp")
-      .select("*")
+      .select("user_id, total_xp, level")
       .eq("user_id", userId)
       .maybeSingle()
 
@@ -49,7 +49,7 @@ export function useXP() {
       const { data: inserted, error: insertError } = await supabase
         .from("user_xp")
         .insert({ user_id: userId })
-        .select()
+        .select("user_id, total_xp, level")
         .maybeSingle()
 
       if (insertError) {

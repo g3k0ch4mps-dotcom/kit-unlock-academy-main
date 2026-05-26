@@ -200,9 +200,8 @@ import { useXP } from "@/hooks/use-xp";
              userId: user.id,
              programId: test.program_id,
              kitId: test.kit_id,
-             score: score
            }
-         });
+          });
  
          if (!error) {
            toast({

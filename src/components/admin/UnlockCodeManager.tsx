@@ -359,6 +359,7 @@ export const UnlockCodeManager = () => {
                           size="sm"
                           onClick={() => handleCopy(code.code)}
                           disabled={code.is_used}
+                          aria-label="Copy code"
                         >
                           {copiedCode === code.code ? (
                             <Check className="h-4 w-4" />
@@ -371,6 +372,7 @@ export const UnlockCodeManager = () => {
                           size="sm"
                           className="text-destructive"
                           onClick={() => handleRevoke(code.id)}
+                          aria-label="Revoke code"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

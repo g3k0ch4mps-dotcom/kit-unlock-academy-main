@@ -55,6 +55,7 @@ export const Profile = () => {
 
     if (error) {
       console.error("Error fetching profile:", error);
+      toast({ title: "Failed to load profile", variant: "destructive" });
     } else {
       setProfile(data as Profile);
       setFullName(data.full_name || "");
@@ -73,6 +74,7 @@ export const Profile = () => {
 
     if (error) {
       console.error("Error fetching certificates:", error);
+      toast({ title: "Failed to load certificates", variant: "destructive" });
     } else {
       setCertificates(data as Certificate[]);
     }

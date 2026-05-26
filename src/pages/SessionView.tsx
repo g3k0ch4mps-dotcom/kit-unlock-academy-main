@@ -73,103 +73,90 @@ export const SessionView = () => {
    const [isPersonalizing, setIsPersonalizing] = useState(false);
    const [showQuiz, setShowQuiz] = useState(false);
  
-   const fetchData = async () => {
-     setIsLoading(true);
-     
-     // Fetch session
-     const { data: sessionData, error: sessionError } = await supabase
-       .from("sessions")
-       .select("*")
-       .eq("id", sessionId)
-       .maybeSingle();
-     
-     if (sessionError) {
-       console.error("Session fetch error:", sessionError);
-       setIsLoading(false);
-       return;
-     }
+    const fetchData = async () => {
+      setIsLoading(true);
 
-     if (sessionData) {
-       setSession(sessionData);
-       
-       // Fetch program
-       const { data: programData } = await supabase
-         .from("programs")
-         .select("id, title")
-         .eq("id", sessionData.program_id)
-         .maybeSingle();
-       
-       if (programData) {
-         setProgram(programData);
-       }
- 
-       // Fetch adjacent sessions
-       const { data: allSessions } = await supabase
-         .from("sessions")
-         .select("*")
-         .eq("program_id", sessionData.program_id)
-         .order("session_order");
-       
-       if (allSessions) {
-         const currentIndex = allSessions.findIndex(s => s.id === sessionId);
-         setAdjacentSessions({
-           prev: currentIndex > 0 ? allSessions[currentIndex - 1] : null,
-           next: currentIndex < allSessions.length - 1 ? allSessions[currentIndex + 1] : null
-         });
-       }
-     }
-     
-     // Fetch content blocks
-     const { data: blocks, error: blocksError } = await supabase
-       .from("content_blocks")
-       .select("*")
-       .eq("session_id", sessionId)
-       .order("block_order");
-     
-     if (blocksError) {
-       console.error("Content blocks fetch error:", blocksError);
-     }
+      const [sessionResult, blocksResult, progressResult, xpTxResult] = await Promise.all([
+        supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle(),
+        supabase.from("content_blocks").select("*").eq("session_id", sessionId).order("block_order"),
+        user
+          ? supabase.from("session_progress").select("completed").eq("session_id", sessionId).eq("user_id", user.id).maybeSingle()
+          : Promise.resolve(null),
+        user
+          ? supabase.from("xp_transactions").select("id").eq("user_id", user.id).eq("reference_type", "session").eq("reference_id", sessionId).limit(1)
+          : Promise.resolve(null),
+      ]);
 
-     if (blocks && blocks.length > 0) {
-       setContentBlocks(blocks);
-     } else if (!blocksError) {
-       console.warn("No content blocks returned — retrying...");
-       await new Promise(r => setTimeout(r, 800));
-       const { data: retryBlocks, error: retryError } = await supabase
-         .from("content_blocks")
-         .select("*")
-         .eq("session_id", sessionId)
-         .order("block_order");
-       if (retryError) console.error("Retry blocks error:", retryError);
-       if (retryBlocks) setContentBlocks(retryBlocks);
-     }
- 
-      // Check if marked complete and XP already awarded
-      if (user) {
-        const { data: progress } = await supabase
-          .from("session_progress")
-          .select("completed")
-          .eq("session_id", sessionId)
-          .eq("user_id", user.id)
-          .maybeSingle();
-        
-        setIsMarkedComplete(progress?.completed || false);
+      const sessionData = sessionResult.data;
+      const sessionError = sessionResult.error;
 
-        // Check if XP was already awarded for this session
-        const { data: xpTx } = await supabase
-          .from("xp_transactions")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("reference_type", "session")
-          .eq("reference_id", sessionId)
-          .limit(1);
-
-        setXpAwarded(!!(xpTx && xpTx.length > 0));
+      if (sessionError) {
+        console.error("Session fetch error:", sessionError);
+        toast({ title: "Failed to load session", description: sessionError.message, variant: "destructive" });
+        setIsLoading(false);
+        return;
       }
-     
+
+      if (sessionData) {
+        setSession(sessionData);
+      }
+
+      const blocks = blocksResult.data;
+      const blocksError = blocksResult.error;
+
+      if (blocksError) {
+        console.error("Content blocks fetch error:", blocksError);
+        toast({ title: "Failed to load content blocks", variant: "destructive" });
+      }
+
+      if (blocks && blocks.length > 0) {
+        setContentBlocks(blocks);
+      } else if (!blocksError) {
+        console.warn("No content blocks returned — retrying...");
+        let retryData = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const delay = 800 * Math.pow(2, attempt);
+          await new Promise(r => setTimeout(r, delay));
+          const { data: rb, error: re } = await supabase
+            .from("content_blocks")
+            .select("*")
+            .eq("session_id", sessionId)
+            .order("block_order");
+          if (re) {
+            console.error("Retry blocks error:", re);
+            if (attempt === 2) toast({ title: "Content still unavailable after retry", variant: "destructive" });
+            break;
+          }
+          if (rb && rb.length > 0) { retryData = rb; break; }
+        }
+        if (retryData) setContentBlocks(retryData);
+      }
+
+      setIsMarkedComplete(progressResult?.data?.completed || false);
+      setXpAwarded(!!(xpTxResult?.data && xpTxResult.data.length > 0));
+
+      // Phase 2: queries that depend on session data
+      if (sessionData) {
+        const [programResult, allSessionsResult] = await Promise.all([
+          supabase.from("programs").select("id, title").eq("id", sessionData.program_id).maybeSingle(),
+          supabase.from("sessions").select("*").eq("program_id", sessionData.program_id).order("session_order"),
+        ]);
+
+        if (programResult.data) {
+          setProgram(programResult.data);
+        }
+
+        if (allSessionsResult.data) {
+          const currentIndex = allSessionsResult.data.findIndex(s => s.id === sessionId);
+          setAdjacentSessions({
+            prev: currentIndex > 0 ? allSessionsResult.data[currentIndex - 1] : null,
+            next: currentIndex < allSessionsResult.data.length - 1 ? allSessionsResult.data[currentIndex + 1] : null,
+          });
+        }
+      }
+
       setIsLoading(false);
-      
-      // Personalize content after loading
+
       if (user && sessionData) {
         personalizeContent(sessionData.program_id);
       }
@@ -208,6 +195,7 @@ export const SessionView = () => {
         }
       } catch (err) {
         console.error("Personalization error:", err);
+        toast({ title: "Content personalization failed", description: "Using default content", variant: "destructive" });
       } finally {
         setIsPersonalizing(false);
       }
@@ -224,6 +212,7 @@ export const SessionView = () => {
         await personalizeContent(session.program_id);
       } catch (err) {
         console.error("Regeneration error:", err);
+        toast({ title: "Content regeneration failed", variant: "destructive" });
       }
     };
 
@@ -359,15 +348,16 @@ export const SessionView = () => {
                  </Badge>
                )}
                {skillLevel && (
-                 <Button
-                   variant="ghost"
-                   size="sm"
-                   onClick={handleRegenerate}
-                   disabled={isPersonalizing}
-                   title="Regenerate personalized content"
-                 >
-                   <RefreshCw className={`h-4 w-4 ${isPersonalizing ? "animate-spin" : ""}`} />
-                 </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRegenerate}
+                    disabled={isPersonalizing}
+                    title="Regenerate personalized content"
+                    aria-label="Regenerate personalized content"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isPersonalizing ? "animate-spin" : ""}`} />
+                  </Button>
                )}
                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                  <Code2 className="h-4 w-4" />

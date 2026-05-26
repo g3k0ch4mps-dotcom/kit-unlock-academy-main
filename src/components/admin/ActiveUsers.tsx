@@ -132,6 +132,7 @@ export const ActiveUsers = () => {
                       onClick={() => revokeDevice(d.id)}
                       disabled={revoking === d.id}
                       title="Revoke device"
+                      aria-label="Revoke device"
                     >
                       {revoking === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
                     </Button>

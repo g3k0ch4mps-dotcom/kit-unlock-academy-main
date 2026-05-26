@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { Upload, X, FileText, Image, Code, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 interface UploadedFile {
   id: string;
@@ -35,6 +36,7 @@ const getFileIcon = (type: "document" | "image" | "code") => {
 };
 
 export const FileUploadZone = ({ onFilesChange, files }: FileUploadZoneProps) => {
+  const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
 
   const processFile = async (file: File, relativePath?: string): Promise<UploadedFile> => {
@@ -54,6 +56,7 @@ export const FileUploadZone = ({ onFilesChange, files }: FileUploadZoneProps) =>
         uploadedFile.content = await file.text();
       } catch (e) {
         console.error("Could not read file content:", e);
+        toast({ title: "Failed to read file", description: "Some file contents may be unavailable.", variant: "destructive" });
       }
     }
     
@@ -236,6 +239,7 @@ export const FileUploadZone = ({ onFilesChange, files }: FileUploadZoneProps) =>
                       e.stopPropagation();
                       removeFile(uploadedFile.id);
                     }}
+                    aria-label="Remove file"
                   >
                     <X className="h-4 w-4" />
                   </Button>

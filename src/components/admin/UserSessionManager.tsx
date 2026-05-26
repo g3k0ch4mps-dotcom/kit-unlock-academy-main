@@ -176,6 +176,7 @@ export const UserSessionManager = () => {
 
     if (xpError) {
       console.error("reset_session_xp RPC error:", xpError);
+      toast({ title: "Failed to reset XP", description: xpError.message, variant: "destructive" });
     }
 
     const newTotal = (xpResult as { total_xp?: number })?.total_xp ?? 0;

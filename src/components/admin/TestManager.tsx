@@ -281,19 +281,20 @@
                  </p>
                </div>
                <div className="flex items-center gap-2">
-                 <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(test)}>
-                   <Pencil className="h-4 w-4" />
-                 </Button>
-                 <Button
-                   variant="ghost"
-                   size="icon"
-                   onClick={() => {
-                     setEditingTest(test);
-                     setIsDeleteDialogOpen(true);
-                   }}
-                 >
-                   <Trash2 className="h-4 w-4 text-destructive" />
-                 </Button>
+                  <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(test)} aria-label="Edit test">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setEditingTest(test);
+                      setIsDeleteDialogOpen(true);
+                    }}
+                    aria-label="Delete test"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
                </div>
              </div>
            ))}
@@ -389,14 +390,15 @@
                <h4 className="font-semibold mb-3">Questions ({formData.questions.length})</h4>
                {formData.questions.map((q, idx) => (
                  <div key={q.id} className="p-3 rounded-lg bg-muted/50 mb-2 relative">
-                   <Button
-                     variant="ghost"
-                     size="icon"
-                     className="absolute top-2 right-2 h-6 w-6"
-                     onClick={() => removeQuestion(q.id)}
-                   >
-                     <X className="h-4 w-4" />
-                   </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 h-6 w-6"
+                      onClick={() => removeQuestion(q.id)}
+                      aria-label="Remove question"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
                    <p className="text-sm font-medium mb-1">Q{idx + 1}: {q.question}</p>
                    <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
                      {q.options.map((opt, i) => (

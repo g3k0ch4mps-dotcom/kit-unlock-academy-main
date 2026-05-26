@@ -80,6 +80,7 @@ export const CodeEditor = ({
             size="icon"
             className="h-7 w-7 text-[#858585] hover:text-white hover:bg-[#3c3c3c]"
             onClick={handleCopy}
+            aria-label="Copy code"
           >
             {copied ? (
               <Check className="h-4 w-4 text-green-400" />

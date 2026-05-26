@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Cpu, 
   BookOpen, 
@@ -49,149 +51,140 @@ interface RecentActivity {
   timestamp: Date;
 }
 
+const fetchEnrolledPrograms = async (userId: string): Promise<EnrolledProgram[]> => {
+  const { data: accessData, error: accessError } = await supabase
+    .from("user_program_access")
+    .select(`
+      id, program_id, unlocked_at,
+      programs:program_id (
+        id, title, description,
+        kits:kit_id (id, name, image_url, category)
+      )
+    `)
+    .eq("user_id", userId);
+
+  if (accessError) throw accessError;
+  if (!accessData || accessData.length === 0) return [];
+
+  const programIds = accessData.map(a => a.program_id);
+
+  const { data: allSessions } = await supabase
+    .from("sessions")
+    .select("id, program_id")
+    .in("program_id", programIds);
+
+  const sessionCountMap: Record<string, number> = {};
+  const sessionIdToProgram: Record<string, string> = {};
+  if (allSessions) {
+    for (const s of allSessions) {
+      sessionCountMap[s.program_id] = (sessionCountMap[s.program_id] || 0) + 1;
+      sessionIdToProgram[s.id] = s.program_id;
+    }
+  }
+
+  const sessionIds = allSessions?.map(s => s.id) || [];
+  const { data: completedProgress } = await supabase
+    .from("session_progress")
+    .select("session_id")
+    .eq("user_id", userId)
+    .eq("completed", true)
+    .in("session_id", sessionIds);
+
+  const completedCountMap: Record<string, number> = {};
+  if (completedProgress) {
+    for (const p of completedProgress) {
+      const progId = sessionIdToProgram[p.session_id];
+      if (progId) completedCountMap[progId] = (completedCountMap[progId] || 0) + 1;
+    }
+  }
+
+  return accessData.map((access: { id: string; program_id: string; unlocked_at: string; programs: { id: string; title: string; description: string | null; kits: { id: string; name: string; image_url: string | null; category: string } } }) => {
+    const program = access.programs;
+    const kit = program?.kits;
+    const progId = access.program_id;
+    return {
+      id: access.id,
+      program_id: progId,
+      unlocked_at: access.unlocked_at,
+      program: {
+        id: program?.id,
+        title: program?.title,
+        description: program?.description,
+        kit: {
+          id: kit?.id,
+          name: kit?.name,
+          image_url: kit?.image_url,
+          category: kit?.category,
+        },
+      },
+      totalSessions: sessionCountMap[progId] || 0,
+      completedSessions: completedCountMap[progId] || 0,
+    };
+  });
+};
+
 export const Dashboard = () => {
+  const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [isRedeemModalOpen, setIsRedeemModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [enrolledPrograms, setEnrolledPrograms] = useState<EnrolledProgram[]>([]);
-  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
-  const [userXP, setUserXP] = useState<{ total_xp: number; level: number } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) {
-      fetchEnrolledPrograms();
-      fetchRecentActivity();
-      fetchUserXP();
-    }
-  }, [user]);
 
-  const fetchUserXP = async () => {
-    if (!user) return;
-    const { data, error } = await supabase
-      .from("user_xp")
-      .select("total_xp, level")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (error) console.error("Dashboard fetchUserXP error:", error);
-    if (data) setUserXP(data);
-  };
+  const { data: enrolledPrograms = [], isLoading } = useQuery({
+    queryKey: ["enrolled-programs", user?.id],
+    queryFn: () => fetchEnrolledPrograms(user!.id),
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: userXP } = useQuery({
+    queryKey: ["user-xp", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_xp")
+        .select("total_xp, level")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) {
+        console.error("Dashboard fetchUserXP error:", error);
+        toast({ title: "Failed to load XP", variant: "destructive" });
+      }
+      return data ?? null;
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Refresh XP data when returning to this page
   useEffect(() => {
-    const handleFocus = () => fetchUserXP();
+    const handleFocus = () => {
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: ["user-xp", user.id] });
+      }
+    };
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
   }, [user]);
 
-  const fetchEnrolledPrograms = async () => {
-    if (!user) return;
-
-    try {
-      // Get user's program access
-      const { data: accessData, error: accessError } = await supabase
-        .from("user_program_access")
-        .select(`
-          id,
-          program_id,
-          unlocked_at,
-          programs:program_id (
-            id,
-            title,
-            description,
-            kits:kit_id (
-              id,
-              name,
-              image_url,
-              category
-            )
-          )
-        `)
-        .eq("user_id", user.id);
-
-      if (accessError) throw accessError;
-
-      // Get session counts and progress for each program
-      const programsWithProgress = await Promise.all(
-        (accessData || []).map(async (access: any) => {
-          const program = access.programs;
-          const kit = program?.kits;
-
-          // Get total sessions
-          const { count: totalSessions } = await supabase
-            .from("sessions")
-            .select("*", { count: "exact", head: true })
-            .eq("program_id", access.program_id);
-
-          // Get completed sessions
-          const { count: completedSessions } = await supabase
-            .from("session_progress")
-            .select("*", { count: "exact", head: true })
-            .eq("user_id", user.id)
-            .eq("completed", true)
-            .in("session_id", 
-              (await supabase
-                .from("sessions")
-                .select("id")
-                .eq("program_id", access.program_id)
-              ).data?.map(s => s.id) || []
-            );
-
-          return {
-            id: access.id,
-            program_id: access.program_id,
-            unlocked_at: access.unlocked_at,
-            program: {
-              id: program?.id,
-              title: program?.title,
-              description: program?.description,
-              kit: {
-                id: kit?.id,
-                name: kit?.name,
-                image_url: kit?.image_url,
-                category: kit?.category,
-              },
-            },
-            totalSessions: totalSessions || 0,
-            completedSessions: completedSessions || 0,
-          };
-        })
-      );
-
-      setEnrolledPrograms(programsWithProgress);
-    } catch (error) {
-      console.error("Error fetching enrolled programs:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchRecentActivity = async () => {
-    if (!user) return;
-
-    try {
+  const { data: recentActivity = [] } = useQuery({
+    queryKey: ["recent-activity", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
       const activities: RecentActivity[] = [];
 
-      // Fetch session progress activities
       const { data: progressData } = await supabase
         .from("session_progress")
         .select(`
-          id,
-          last_accessed_at,
-          completed,
-          sessions:session_id (
-            title,
-            programs:program_id (
-              title
-            )
-          )
+          id, last_accessed_at, completed,
+          sessions:session_id (title, programs:program_id (title))
         `)
         .eq("user_id", user.id)
         .order("last_accessed_at", { ascending: false })
         .limit(5);
 
       if (progressData) {
-        progressData.forEach((progress: any) => {
+        for (const progress of progressData as { id: string; last_accessed_at: string; sessions: { title: string; programs: { title: string } } | null }[]) {
           activities.push({
             id: progress.id,
             type: "session",
@@ -200,25 +193,18 @@ export const Dashboard = () => {
             time: formatTimeAgo(new Date(progress.last_accessed_at)),
             timestamp: new Date(progress.last_accessed_at),
           });
-        });
+        }
       }
 
-      // Fetch program unlock activities
       const { data: unlockData } = await supabase
         .from("user_program_access")
-        .select(`
-          id,
-          unlocked_at,
-          programs:program_id (
-            title
-          )
-        `)
+        .select(`id, unlocked_at, programs:program_id (title)`)
         .eq("user_id", user.id)
         .order("unlocked_at", { ascending: false })
         .limit(5);
 
       if (unlockData) {
-        unlockData.forEach((unlock: any) => {
+        for (const unlock of unlockData as { id: string; unlocked_at: string; programs: { title: string } | null }[]) {
           activities.push({
             id: `unlock-${unlock.id}`,
             type: "unlock",
@@ -227,16 +213,15 @@ export const Dashboard = () => {
             time: formatTimeAgo(new Date(unlock.unlocked_at)),
             timestamp: new Date(unlock.unlocked_at),
           });
-        });
+        }
       }
 
-      // Sort by timestamp and take top 5
       activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-      setRecentActivity(activities.slice(0, 5));
-    } catch (error) {
-      console.error("Error fetching recent activity:", error);
-    }
-  };
+      return activities.slice(0, 5);
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const formatTimeAgo = (date: Date): string => {
     const now = new Date();
@@ -254,9 +239,10 @@ export const Dashboard = () => {
 
   const handleCodeRedeemed = (programId: string, _programTitle: string) => {
     setIsRedeemModalOpen(false);
-    // Refresh the programs list to show newly unlocked program
-    fetchEnrolledPrograms();
-    fetchRecentActivity();
+    if (user) {
+      queryClient.invalidateQueries({ queryKey: ["enrolled-programs", user.id] });
+      queryClient.invalidateQueries({ queryKey: ["recent-activity", user.id] });
+    }
   };
 
   const filteredPrograms = enrolledPrograms.filter(

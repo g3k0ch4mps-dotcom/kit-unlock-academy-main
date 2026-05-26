@@ -230,6 +230,7 @@ export const RichTextEditor = ({
                 }
               } catch (err) {
                 console.error("Failed to process pasted base64 image:", err);
+                toast({ title: "Image upload failed", variant: "destructive" });
               }
             });
 
@@ -329,6 +330,7 @@ export const RichTextEditor = ({
       className={`h-8 w-8 p-0 ${isActive ? "bg-muted text-primary" : ""}`}
       onClick={onClick}
       title={title}
+      aria-label={title}
     >
       {children}
     </Button>

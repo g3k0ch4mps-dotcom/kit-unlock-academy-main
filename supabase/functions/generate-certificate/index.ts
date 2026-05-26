@@ -12,43 +12,94 @@ serve(async (req) => {
   }
 
   try {
-    const { testAttemptId, userId, programId, kitId, score, certificateType } = await req.json();
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Get user profile
-    const { data: profile } = await supabase
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+    }
+    const token = authHeader.replace("Bearer ", "");
+    const anonClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+    }
+
+    const { testAttemptId, userId, programId, kitId, certificateType } = await req.json();
+
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+
+    const isSelf = user.id === userId;
+    const { data: roleData } = await adminClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const isAdmin = roleData?.role === "admin";
+    if (!isSelf && !isAdmin) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: corsHeaders });
+    }
+
+    let verifiedScore: number;
+    let validatedCertType: string;
+
+    if (testAttemptId) {
+      const { data: attempt } = await adminClient
+        .from("test_attempts")
+        .select("id, score, passed")
+        .eq("id", testAttemptId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!attempt || !attempt.passed) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: corsHeaders });
+      }
+      verifiedScore = attempt.score;
+      validatedCertType = certificateType || (verifiedScore >= 80 ? "completion" : "participation");
+    } else {
+      const { data: quizAttempts } = await adminClient
+        .from("session_quiz_attempts")
+        .select("score, total_questions")
+        .eq("user_id", userId)
+        .eq("program_id", programId);
+      if (!quizAttempts || quizAttempts.length === 0) {
+        return new Response(JSON.stringify({ error: "No quiz attempts found" }), { status: 403, headers: corsHeaders });
+      }
+      const totalScore = quizAttempts.reduce((sum, a) => sum + a.score, 0);
+      const totalPossible = quizAttempts.reduce((sum, a) => sum + a.total_questions, 0);
+      verifiedScore = totalPossible > 0 ? Math.round((totalScore / totalPossible) * 100) : 0;
+      validatedCertType = verifiedScore >= 80 ? "completion" : "participation";
+    }
+
+    const { data: profile } = await adminClient
       .from("profiles")
       .select("full_name, email")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
 
     if (!profile) {
       throw new Error("User profile not found");
     }
 
-    // Get program title
     let programTitle = "Mamuza Engineering Course";
-    
+
     if (programId) {
-      const { data: program } = await supabase
+      const { data: program } = await adminClient
         .from("programs")
         .select("title")
         .eq("id", programId)
-        .single();
+        .maybeSingle();
       if (program) programTitle = program.title;
     } else if (kitId) {
-      const { data: kit } = await supabase
+      const { data: kit } = await adminClient
         .from("kits")
         .select("name")
         .eq("id", kitId)
-        .single();
+        .maybeSingle();
       if (kit) programTitle = kit.name;
     }
 
-    // Generate unique hex certificate code
     const hexCode = Array.from(crypto.getRandomValues(new Uint8Array(12)))
       .map(b => b.toString(16).padStart(2, "0"))
       .join("")
@@ -61,10 +112,9 @@ serve(async (req) => {
     });
 
     const learnerName = profile.full_name || profile.email.split('@')[0];
-    const certType = certificateType || (score >= 80 ? "completion" : "participation");
+    const certType = validatedCertType;
     const certTitle = certType === "completion" ? "Certificate of Completion" : "Certificate of Participation";
 
-    // Generate unique colors per program for visual distinction
     const programHash = (programTitle || "").split("").reduce((a, c) => a + c.charCodeAt(0), 0);
     const hue = programHash % 360;
     const accentColor = `hsl(${hue}, 70%, 45%)`;
@@ -82,75 +132,66 @@ serve(async (req) => {
             <stop offset="100%" style="stop-color:hsl(${(hue + 20) % 360}, 65%, 50%)"/>
           </linearGradient>
         </defs>
-        
+
         <rect width="800" height="600" fill="#ffffff"/>
         <rect x="10" y="10" width="780" height="580" fill="none" stroke="url(#border-gradient)" stroke-width="8" rx="8"/>
         <rect x="25" y="25" width="750" height="550" fill="none" stroke="#1f2937" stroke-width="1" rx="4"/>
-        
-        <!-- Header -->
+
         <rect x="40" y="40" width="720" height="80" fill="url(#header-gradient)" rx="4"/>
         <text x="400" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#ffffff">
           MAMUZA ENGINEERING
         </text>
-        
-        <!-- Certificate Type -->
+
         <text x="400" y="165" text-anchor="middle" font-family="Georgia, serif" font-size="30" fill="#1f2937">
           ${certTitle}
         </text>
-        
+
         <line x1="200" y1="185" x2="600" y2="185" stroke="${accentColor}" stroke-width="2"/>
-        
+
         <text x="400" y="225" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
           This is to certify that
         </text>
-        
-        <!-- Learner Name -->
+
         <text x="400" y="275" text-anchor="middle" font-family="Georgia, serif" font-size="36" font-weight="bold" fill="#1f2937">
           ${learnerName}
         </text>
         <line x1="150" y1="290" x2="650" y2="290" stroke="#e5e7eb" stroke-width="1"/>
-        
+
         <text x="400" y="330" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
           has ${certType === "completion" ? "successfully completed" : "participated in"}
         </text>
-        
-        <!-- Program Title -->
+
         <text x="400" y="370" text-anchor="middle" font-family="Georgia, serif" font-size="22" font-weight="bold" fill="${accentColor}">
           ${programTitle}
         </text>
-        
-        <!-- Score -->
+
         <text x="400" y="410" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
-          with an average score of ${score}%
+          with an average score of ${verifiedScore}%
         </text>
-        
-        <!-- Date & Cert Number -->
+
         <text x="200" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#6b7280">
           Issue Date: ${issueDate}
         </text>
         <text x="600" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#6b7280">
           Certificate No: ${certificateNumber}
         </text>
-        
-        <!-- Hex authentication code -->
+
         <rect x="200" y="530" width="400" height="30" fill="${accentLight}" rx="4"/>
         <text x="400" y="550" text-anchor="middle" font-family="monospace" font-size="11" fill="${accentColor}">
           Authentication: ${hexCode}
         </text>
-        
-        <!-- Tagline -->
+
         <text x="400" y="580" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-style="italic" fill="${accentColor}">
           Inspire. Solve. Lead.
         </text>
       </svg>
     `;
 
-    // Upload to storage
     const encoder = new TextEncoder();
     const svgBytes = encoder.encode(certificateSvg);
     const fileName = `${userId}/${certificateNumber}.svg`;
-    
-    const { error: uploadError } = await supabase.storage
+
+    const { error: uploadError } = await adminClient.storage
       .from("certificates")
       .upload(fileName, svgBytes, {
         contentType: "image/svg+xml",
@@ -162,14 +203,13 @@ serve(async (req) => {
       throw new Error("Failed to upload certificate");
     }
 
-    const { data: urlData } = supabase.storage
+    const { data: urlData } = adminClient.storage
       .from("certificates")
       .getPublicUrl(fileName);
 
     const certificateUrl = urlData.publicUrl;
 
-    // Save certificate record
-    const { data: certificate, error: insertError } = await supabase
+    const { data: certificate, error: insertError } = await adminClient
       .from("certificates")
       .insert({
         user_id: userId,
@@ -180,12 +220,12 @@ serve(async (req) => {
         program_title: programTitle,
         certificate_number: certificateNumber,
         certificate_url: certificateUrl,
-        score: score,
+        score: verifiedScore,
         issued_at: issuedAt,
         certificate_type: certType,
       })
       .select()
-      .single();
+      .maybeSingle();
 
     if (insertError) {
       console.error("Insert error:", insertError);
@@ -201,7 +241,7 @@ serve(async (req) => {
           certificateUrl,
           learnerName,
           programTitle,
-          score,
+          score: verifiedScore,
           certificateType: certType,
           issuedAt
         }

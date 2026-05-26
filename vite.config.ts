@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    allowedHosts: ["localhost", ".lovable.app"],
     hmr: {
       overlay: false,
     },

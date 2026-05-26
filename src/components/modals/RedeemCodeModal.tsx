@@ -148,6 +148,7 @@ export const RedeemCodeModal = ({
 
       if (findError) {
         console.error("DB error looking up code:", findError);
+        toast({ title: "Network error", description: "Failed to look up code. Please try again.", variant: "destructive" });
         setError("network");
         return;
       }
@@ -221,6 +222,7 @@ export const RedeemCodeModal = ({
 
       if (updateError) {
         console.error("Failed to mark code used:", updateError);
+        toast({ title: "Network error", description: "Failed to redeem code. Please try again.", variant: "destructive" });
         setError("network");
         return;
       }
@@ -242,6 +244,7 @@ export const RedeemCodeModal = ({
 
         if (accessError) {
           console.error("Failed to grant access:", accessError);
+          toast({ title: "Network error", description: "Failed to grant program access. Please try again.", variant: "destructive" });
           setError("network");
           return;
         }
@@ -260,6 +263,7 @@ export const RedeemCodeModal = ({
       });
     } catch (error) {
       console.error("Unexpected redemption error:", error);
+      toast({ title: "Unexpected error", description: "Something went wrong. Please try again.", variant: "destructive" });
       setError("generic");
     }
   };

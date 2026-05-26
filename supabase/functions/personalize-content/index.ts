@@ -142,7 +142,7 @@ Make questions relevant to ${programCategory || "STEM"} and practical, referenci
         .select("skill_level")
         .eq("user_id", user.id)
         .eq("program_id", programId)
-        .single();
+        .maybeSingle();
 
       if (!assessment) {
         return new Response(JSON.stringify({ error: "No assessment found. Please complete the assessment first." }), {
@@ -314,7 +314,7 @@ Return a JSON array where each item has:
         .from("sessions")
         .select("title")
         .eq("id", sessionId)
-        .single();
+        .maybeSingle();
 
       const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",

@@ -1,4 +1,5 @@
 import React from "react";
+import DOMPurify from "dompurify";
 
 /**
  * Parses inline formatting: *italic*, UPPERCASE emphasis, `code`,
@@ -60,7 +61,7 @@ export const FormattedText = ({ content, className = "" }: FormattedTextProps) =
     return (
       <div
         className={`prose prose-sm max-w-none ${className}`}
-        dangerouslySetInnerHTML={{ __html: content }}
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }}
       />
     );
   }

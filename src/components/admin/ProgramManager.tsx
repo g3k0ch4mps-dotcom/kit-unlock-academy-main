@@ -254,19 +254,20 @@
                  </div>
                </div>
                <div className="flex items-center gap-2">
-                 <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(program)}>
-                   <Pencil className="h-4 w-4" />
-                 </Button>
-                 <Button
-                   variant="ghost"
-                   size="icon"
-                   onClick={() => {
-                     setEditingProgram(program);
-                     setIsDeleteDialogOpen(true);
-                   }}
-                 >
-                   <Trash2 className="h-4 w-4 text-destructive" />
-                 </Button>
+                  <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(program)} aria-label="Edit program">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setEditingProgram(program);
+                      setIsDeleteDialogOpen(true);
+                    }}
+                    aria-label="Delete program"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
                </div>
              </div>
            ))}

@@ -332,7 +332,7 @@ export const AIContentGenerator = ({ kits, onContentGenerated }: AIContentGenera
                 <div className="space-y-2">
                   <Label>Generate Images</Label>
                   <div className="flex items-center gap-2 h-10">
-                    <Switch checked={generateImages} onCheckedChange={setGenerateImages} />
+                    <Switch checked={generateImages} onCheckedChange={setGenerateImages} aria-label="Generate Images" />
                     <span className="text-sm text-muted-foreground">
                       {generateImages ? "Enabled" : "Disabled"}
                     </span>
