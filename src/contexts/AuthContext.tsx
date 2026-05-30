@@ -75,6 +75,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setRoles((rolesData as UserRole[]) || []);
           });
       }
+
+      if (window.location.hash) {
+        window.history.replaceState({}, "", window.location.pathname);
+      }
       
       setIsLoading(false);
     });
