@@ -76,9 +76,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           });
       }
 
-      if (window.location.hash) {
-        window.history.replaceState({}, "", window.location.pathname);
-      }
+      window.history.replaceState({}, "", window.location.pathname);
       
       setIsLoading(false);
     });
