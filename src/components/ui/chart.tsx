@@ -58,6 +58,10 @@ const ChartContainer = React.forwardRef<
 });
 ChartContainer.displayName = "Chart";
 
+// Matches hex, rg[a]/hsl[a] functions, and bare CSS color keywords. Anything
+// containing ";", "}", or "url(" (CSS-injection vectors) is rejected.
+const SAFE_COLOR_RE = /^(#[0-9a-fA-F]{3,8}|rgba?\([\d\s.,%]+\)|hsla?\([\d\s.,%]+\)|[a-zA-Z]+)$/;
+
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(([_, config]) => config.theme || config.color);
 
@@ -75,7 +79,10 @@ ${prefix} [data-chart=${id}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
     const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
+    // Only emit values that look like safe CSS colors, to prevent CSS injection
+    // if a color ever originates from user/DB content.
+    if (!color || !SAFE_COLOR_RE.test(color.trim())) return null;
+    return `  --color-${key}: ${color};`;
   })
   .join("\n")}
 }
