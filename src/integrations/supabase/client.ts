@@ -8,8 +8,6 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-const isDev = import.meta.env.DEV || import.meta.env.VITE_SUPABASE_MONITOR === "true";
-
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
@@ -18,8 +16,10 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
   }
 });
 
-// Attach API call monitor in dev mode
-if (isDev) {
+// Attach API call monitor in genuine dev builds only.
+// Note: do NOT gate this on a VITE_* env var — those are statically inlined at
+// build time and would leak the monitor into a production bundle.
+if (import.meta.env.DEV) {
   import("./monitor").then(({ enableSupabaseMonitor }) => {
     enableSupabaseMonitor(supabase);
   });

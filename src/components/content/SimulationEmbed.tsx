@@ -61,7 +61,8 @@
            src={embedUrl}
            title={title}
            className="w-full h-full border-0"
-           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+           allow="accelerometer; autoplay; encrypted-media; gyroscope; fullscreen"
            allowFullScreen
          />
        </div>

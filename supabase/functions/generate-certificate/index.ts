@@ -1,12 +1,47 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+// Restrict CORS to known origins instead of "*". Additional origins can be
+// supplied via the ALLOWED_ORIGINS env var (comma-separated). *.lovable.app
+// preview/production hosts are allowed by default.
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "http://localhost:8080,http://localhost:5173")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+function isAllowedOrigin(origin: string): boolean {
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  try {
+    const { hostname, protocol } = new URL(origin);
+    return protocol === "https:" && (hostname === "lovable.app" || hostname.endsWith(".lovable.app"));
+  } catch {
+    return false;
+  }
+}
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") ?? "";
+  const allowOrigin = isAllowedOrigin(origin) ? origin : (ALLOWED_ORIGINS[0] ?? "");
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "Vary": "Origin",
+  };
+}
+
+// Escape user-controlled strings before embedding them in SVG/XML.
+function escapeXml(str: string): string {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -120,6 +155,11 @@ serve(async (req) => {
     const accentColor = `hsl(${hue}, 70%, 45%)`;
     const accentLight = `hsl(${hue}, 70%, 95%)`;
 
+    // Escape all user-controlled strings before embedding them in the SVG.
+    const safeCertTitle = escapeXml(certTitle);
+    const safeLearnerName = escapeXml(learnerName);
+    const safeProgramTitle = escapeXml(programTitle);
+
     const certificateSvg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
         <defs>
@@ -143,7 +183,7 @@ serve(async (req) => {
         </text>
 
         <text x="400" y="165" text-anchor="middle" font-family="Georgia, serif" font-size="30" fill="#1f2937">
-          ${certTitle}
+          ${safeCertTitle}
         </text>
 
         <line x1="200" y1="185" x2="600" y2="185" stroke="${accentColor}" stroke-width="2"/>
@@ -153,7 +193,7 @@ serve(async (req) => {
         </text>
 
         <text x="400" y="275" text-anchor="middle" font-family="Georgia, serif" font-size="36" font-weight="bold" fill="#1f2937">
-          ${learnerName}
+          ${safeLearnerName}
         </text>
         <line x1="150" y1="290" x2="650" y2="290" stroke="#e5e7eb" stroke-width="1"/>
 
@@ -162,7 +202,7 @@ serve(async (req) => {
         </text>
 
         <text x="400" y="370" text-anchor="middle" font-family="Georgia, serif" font-size="22" font-weight="bold" fill="${accentColor}">
-          ${programTitle}
+          ${safeProgramTitle}
         </text>
 
         <text x="400" y="410" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
@@ -249,11 +289,9 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Certificate generation error:", error);
+    console.error("[generate-certificate] Unhandled error:", error);
     return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error"
-      }),
+      JSON.stringify({ error: "An internal error occurred. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

@@ -139,12 +139,10 @@ export const RedeemCodeModal = ({
     try {
       const normalizedCode = code.toUpperCase().trim();
 
-      // 1. Look up the code
-      const { data: unlockCode, error: findError } = await supabase
-        .from("unlock_codes")
-        .select("id, program_id, kit_id, xp_reward, is_used, expires_at")
-        .eq("code", normalizedCode)
-        .maybeSingle();
+      // 1. Look up the code via a SECURITY DEFINER RPC so users cannot enumerate
+      //    the unlock_codes table — they can only resolve a code they already know.
+      const { data: lookupRows, error: findError } = await supabase
+        .rpc("lookup_unlock_code", { p_code: normalizedCode });
 
       if (findError) {
         console.error("DB error looking up code:", findError);
@@ -152,6 +150,8 @@ export const RedeemCodeModal = ({
         setError("network");
         return;
       }
+
+      const unlockCode = Array.isArray(lookupRows) ? lookupRows[0] : lookupRows;
 
       if (!unlockCode) {
         setError("not_found");
