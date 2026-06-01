@@ -324,6 +324,9 @@ CREATE TABLE public.session_quiz_attempts (
 
 ALTER TABLE public.session_quiz_attempts ENABLE ROW LEVEL SECURITY;
 
+-- Remove duplicated questions column (same data lives in session_quizzes.questions)
+ALTER TABLE public.session_quiz_attempts DROP COLUMN IF EXISTS questions;
+
 
 -- ============================================================
 -- MIGRATION 6: Final RLS policies (all tables)
@@ -366,7 +369,11 @@ CREATE POLICY "Authenticated users can look up codes" ON public.unlock_codes FOR
 CREATE POLICY "Admins can manage codes" ON public.unlock_codes FOR ALL TO authenticated
   USING (public.has_role(auth.uid(), 'admin'))
   WITH CHECK (public.has_role(auth.uid(), 'admin'));
-CREATE POLICY "Users can redeem codes" ON public.unlock_codes FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can redeem codes" ON public.unlock_codes;
+CREATE POLICY "Users can redeem codes" ON public.unlock_codes
+  FOR UPDATE TO authenticated
+  USING (is_used = false)
+  WITH CHECK (is_used = true AND redeemed_by = auth.uid());
 
 -- USER PROGRAM ACCESS
 CREATE POLICY "Users can view their own access" ON public.user_program_access FOR SELECT TO authenticated USING (auth.uid() = user_id);
@@ -488,12 +495,18 @@ CREATE POLICY "Admins can revoke devices" ON public.user_devices
 INSERT INTO storage.buckets (id, name, public) VALUES ('kit-images', 'kit-images', true) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('certificates', 'certificates', true) ON CONFLICT (id) DO NOTHING;
 
+DROP POLICY IF EXISTS "Anyone can view kit images" ON storage.objects;
 CREATE POLICY "Anyone can view kit images" ON storage.objects FOR SELECT USING (bucket_id = 'kit-images');
+DROP POLICY IF EXISTS "Admins can upload kit images" ON storage.objects;
 CREATE POLICY "Admins can upload kit images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'kit-images' AND is_admin_or_instructor(auth.uid()));
+DROP POLICY IF EXISTS "Admins can update kit images" ON storage.objects;
 CREATE POLICY "Admins can update kit images" ON storage.objects FOR UPDATE USING (bucket_id = 'kit-images' AND is_admin_or_instructor(auth.uid()));
+DROP POLICY IF EXISTS "Admins can delete kit images" ON storage.objects;
 CREATE POLICY "Admins can delete kit images" ON storage.objects FOR DELETE USING (bucket_id = 'kit-images' AND is_admin_or_instructor(auth.uid()));
 
+DROP POLICY IF EXISTS "Certificates are publicly viewable" ON storage.objects;
 CREATE POLICY "Certificates are publicly viewable" ON storage.objects FOR SELECT USING (bucket_id = 'certificates');
+DROP POLICY IF EXISTS "System can upload certificates" ON storage.objects;
 CREATE POLICY "System can upload certificates" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'certificates');
 
 -- ============================================================
@@ -682,3 +695,171 @@ INSERT INTO public.badges (name, description, icon, xp_required, criteria) VALUE
   ('Scholar', 'Earn 500 total XP', '🎓', 500, '{"type": "xp_total", "count": 500}'),
   ('Program Complete', 'Complete an entire program', '🏆', NULL, '{"type": "program_completed", "count": 1}')
 ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- MIGRATION 9: XP Functions (SECURITY DEFINER bypass RLS)
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.award_xp(
+  p_user_id UUID,
+  p_amount INTEGER,
+  p_reason TEXT,
+  p_reference_type TEXT DEFAULT NULL,
+  p_reference_id UUID DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_current_total INTEGER;
+  v_new_total INTEGER;
+  v_new_level INTEGER;
+  v_result JSONB;
+BEGIN
+  SELECT COALESCE(total_xp, 0) INTO v_current_total
+  FROM public.user_xp
+  WHERE user_id = p_user_id;
+
+  INSERT INTO public.user_xp (user_id, total_xp, level, updated_at)
+  VALUES (p_user_id, p_amount, 1, now())
+  ON CONFLICT (user_id) DO UPDATE SET
+    total_xp = public.user_xp.total_xp + p_amount,
+    level = public.user_xp.level,
+    updated_at = now()
+  RETURNING total_xp, level INTO v_new_total, v_new_level;
+
+  v_new_level := 1;
+  IF v_new_total >= 3000 THEN v_new_level := 10;
+  ELSIF v_new_total >= 2300 THEN v_new_level := 9;
+  ELSIF v_new_total >= 1700 THEN v_new_level := 8;
+  ELSIF v_new_total >= 1200 THEN v_new_level := 7;
+  ELSIF v_new_total >= 800 THEN v_new_level := 6;
+  ELSIF v_new_total >= 500 THEN v_new_level := 5;
+  ELSIF v_new_total >= 300 THEN v_new_level := 4;
+  ELSIF v_new_total >= 150 THEN v_new_level := 3;
+  ELSIF v_new_total >= 50 THEN v_new_level := 2;
+  END IF;
+
+  UPDATE public.user_xp SET level = v_new_level WHERE user_id = p_user_id;
+
+  INSERT INTO public.xp_transactions (user_id, amount, reason, reference_type, reference_id)
+  VALUES (p_user_id, p_amount, p_reason, p_reference_type, p_reference_id);
+
+  v_result := jsonb_build_object(
+    'total_xp', v_new_total,
+    'level', v_new_level
+  );
+
+  RETURN v_result;
+END;
+$$;
+
+
+CREATE OR REPLACE FUNCTION public.reset_session_xp(
+  p_user_id UUID,
+  p_session_id UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_new_total INTEGER;
+  v_new_level INTEGER;
+  v_result JSONB;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  IF auth.uid() != p_user_id AND NOT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = auth.uid() AND role IN ('admin', 'instructor')
+  ) THEN
+    RAISE EXCEPTION 'Permission denied';
+  END IF;
+
+  DELETE FROM public.xp_transactions
+  WHERE user_id = p_user_id
+    AND reference_type = 'session'
+    AND reference_id = p_session_id;
+
+  DELETE FROM public.xp_transactions
+  WHERE user_id = p_user_id
+    AND reference_type = 'session_quiz'
+    AND reference_id = p_session_id;
+
+  SELECT COALESCE(SUM(amount), 0) INTO v_new_total
+  FROM public.xp_transactions
+  WHERE user_id = p_user_id;
+
+  v_new_level := 1;
+  IF v_new_total >= 3000 THEN v_new_level := 10;
+  ELSIF v_new_total >= 2300 THEN v_new_level := 9;
+  ELSIF v_new_total >= 1700 THEN v_new_level := 8;
+  ELSIF v_new_total >= 1200 THEN v_new_level := 7;
+  ELSIF v_new_total >= 800 THEN v_new_level := 6;
+  ELSIF v_new_total >= 500 THEN v_new_level := 5;
+  ELSIF v_new_total >= 300 THEN v_new_level := 4;
+  ELSIF v_new_total >= 150 THEN v_new_level := 3;
+  ELSIF v_new_total >= 50 THEN v_new_level := 2;
+  END IF;
+
+  UPDATE public.user_xp
+  SET total_xp = v_new_total, level = v_new_level, updated_at = now()
+  WHERE user_id = p_user_id;
+
+  v_result := jsonb_build_object(
+    'total_xp', v_new_total,
+    'level', v_new_level
+  );
+
+  RETURN v_result;
+END;
+$$;
+
+
+-- ============================================================
+-- MIGRATION 10: Missing performance indexes
+-- ============================================================
+
+CREATE INDEX IF NOT EXISTS idx_sessions_program_order
+  ON public.sessions(program_id, session_order);
+CREATE INDEX IF NOT EXISTS idx_content_blocks_session_order
+  ON public.content_blocks(session_id, block_order);
+CREATE INDEX IF NOT EXISTS idx_session_progress_user_session
+  ON public.session_progress(user_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_user_program_access_user
+  ON public.user_program_access(user_id);
+CREATE INDEX IF NOT EXISTS idx_test_attempts_user
+  ON public.test_attempts(user_id);
+CREATE INDEX IF NOT EXISTS idx_certificates_user
+  ON public.certificates(user_id);
+CREATE INDEX IF NOT EXISTS idx_certificates_number
+  ON public.certificates(certificate_number);
+CREATE INDEX IF NOT EXISTS idx_unlock_codes_code
+  ON public.unlock_codes(code);
+CREATE INDEX IF NOT EXISTS idx_session_quiz_attempts_user_session
+  ON public.session_quiz_attempts(user_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_xp_transactions_user_date
+  ON public.xp_transactions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_daily_logins_user_date
+  ON public.daily_logins(user_id, login_date);
+CREATE INDEX IF NOT EXISTS idx_user_roles_user
+  ON public.user_roles(user_id);
+CREATE INDEX IF NOT EXISTS idx_programs_kit
+  ON public.programs(kit_id);
+
+
+-- ============================================================
+-- POST-SETUP: Admin user (customize the UUID for your admin)
+-- ============================================================
+
+-- Uncomment and replace the UUID after creating your admin account:
+-- INSERT INTO public.user_roles (user_id, role)
+-- VALUES ('your-admin-user-id-here', 'admin')
+-- ON CONFLICT (user_id, role) DO NOTHING;
