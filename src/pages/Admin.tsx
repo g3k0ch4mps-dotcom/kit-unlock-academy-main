@@ -39,6 +39,7 @@ import { StoreManager } from "@/components/admin/StoreManager";
 import { ProgramAnalytics } from "@/components/admin/ProgramAnalytics";
 import { CertificateManager } from "@/components/admin/CertificateManager";
 import { UserSessionManager } from "@/components/admin/UserSessionManager";
+import { RoleManager } from "@/components/admin/RoleManager";
 
 export interface GeneratedSessionContent {
   sessionTitle: string;
@@ -388,6 +389,10 @@ export const Admin = () => {
                    <Users className="h-4 w-4" />
                    <span className="hidden sm:inline">Users</span>
                  </TabsTrigger>
+                 <TabsTrigger value="roles" className="flex items-center gap-2">
+                   <Award className="h-4 w-4" />
+                   <span className="hidden sm:inline">Roles</span>
+                 </TabsTrigger>
                  <TabsTrigger value="store" className="flex items-center gap-2">
                    <Gift className="h-4 w-4" />
                    <span className="hidden sm:inline">Store</span>
@@ -607,6 +612,11 @@ export const Admin = () => {
            <TabsContent value="users">
               <div className="bg-card rounded-xl border border-border p-6">
                 <UserSessionManager />
+              </div>
+            </TabsContent>
+           <TabsContent value="roles">
+              <div className="bg-card rounded-xl border border-border p-6">
+                <RoleManager />
               </div>
             </TabsContent>
            <TabsContent value="analytics">

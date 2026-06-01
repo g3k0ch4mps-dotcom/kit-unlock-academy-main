@@ -23,6 +23,7 @@ const TestView = lazy(() => import("./pages/TestView"));
 const Store = lazy(() => import("./pages/Store"));
 const Redeem = lazy(() => import("./pages/Redeem"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+const AdminSetup = lazy(() => import("./pages/AdminSetup"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -98,6 +99,8 @@ const App = () => (
                    <TestView />
                  </ProtectedRoute>
                } />
+              {/* Admin setup — not behind ProtectedRoute so Google OAuth redirect works */}
+              <Route path="/admin-setup" element={<AdminSetup />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
