@@ -39,14 +39,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Fetch user roles
           setTimeout(async () => {
             const { data: rolesData } = await supabase
               .from("user_roles")
               .select("role")
               .eq("user_id", session.user.id);
-            
-            setRoles((rolesData as UserRole[]) || []);
+
+            if (!rolesData || rolesData.length === 0) {
+              // Profile/role missing — likely after a DB reset. Self-heal via RPC.
+              await supabase.rpc("ensure_user_profile" as any);
+              const { data: healed } = await supabase
+                .from("user_roles")
+                .select("role")
+                .eq("user_id", session.user.id);
+              setRoles((healed as UserRole[]) || []);
+            } else {
+              setRoles((rolesData as UserRole[]) || []);
+            }
           }, 0);
         } else {
           setRoles([]);
@@ -71,8 +80,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           .from("user_roles")
           .select("role")
           .eq("user_id", session.user.id)
-          .then(({ data: rolesData }) => {
-            setRoles((rolesData as UserRole[]) || []);
+          .then(async ({ data: rolesData }) => {
+            if (!rolesData || rolesData.length === 0) {
+              await supabase.rpc("ensure_user_profile" as any);
+              const { data: healed } = await supabase
+                .from("user_roles")
+                .select("role")
+                .eq("user_id", session.user.id);
+              setRoles((healed as UserRole[]) || []);
+            } else {
+              setRoles((rolesData as UserRole[]) || []);
+            }
           });
       }
 

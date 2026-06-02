@@ -27,6 +27,7 @@ import { useStreak } from "@/hooks/use-streak";
 import { ContentBlockRenderer } from "@/components/content/ContentBlockRenderer";
  import { SimulationEmbed } from "@/components/content/SimulationEmbed";
  import { SessionQuiz } from "@/components/quiz/SessionQuiz";
+ import { ContentBlockAttachments } from "@/components/learning/ContentBlockAttachments";
  
 
  interface SessionData {
@@ -376,10 +377,12 @@ export const SessionView = () => {
          {/* Content Blocks */}
         <div className="space-y-6">
            {contentBlocks.map((block) => (
-             <ContentBlockRenderer 
-               key={block.id} 
-               block={personalizedMap[block.id] ? { ...block, content: personalizedMap[block.id] } : block} 
-             />
+             <div key={block.id} className="space-y-3">
+               <ContentBlockRenderer
+                 block={personalizedMap[block.id] ? { ...block, content: personalizedMap[block.id] } : block}
+               />
+               <ContentBlockAttachments blockId={block.id} />
+             </div>
            ))}
            
            {/* Simulation Embed */}
