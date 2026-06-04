@@ -37,9 +37,6 @@ export const AIChat = () => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Only show for authenticated users
-  if (!user) return null;
-
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -133,6 +130,9 @@ export const AIChat = () => {
       sendMessage();
     }
   };
+
+  // Only show for authenticated users (after all hooks, to satisfy Rules of Hooks)
+  if (!user) return null;
 
   return (
     <>

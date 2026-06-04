@@ -1,7 +1,29 @@
 import { useState, useCallback } from "react";
-import { Upload, X, FileText, Image, Code, Folder } from "lucide-react";
+import { Upload, X, FileText, Image, Code, Folder, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import * as pdfjsLib from "pdfjs-dist";
+
+// Point the PDF.js worker at the bundled copy so no CDN is needed
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString();
+
+async function extractPdfText(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pageTexts: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ");
+    pageTexts.push(pageText);
+  }
+  return pageTexts.join("\n\n");
+}
 
 interface UploadedFile {
   id: string;
@@ -38,28 +60,41 @@ const getFileIcon = (type: "document" | "image" | "code") => {
 export const FileUploadZone = ({ onFilesChange, files }: FileUploadZoneProps) => {
   const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
+  const [extracting, setExtracting] = useState<string | null>(null);
 
   const processFile = async (file: File, relativePath?: string): Promise<UploadedFile> => {
     const type = getFileType(file);
     const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
     const uploadedFile: UploadedFile = { id, file, type, relativePath };
-    
-    // Create preview for images
+
     if (type === "image") {
       uploadedFile.preview = URL.createObjectURL(file);
     }
-    
-    // Read text content for code and text documents
-    if (type === "code" || (type === "document" && file.type === "text/plain")) {
+
+    // Extract text from PDFs (fixes: PDFs previously sent no content to the AI)
+    const isPdf = file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf";
+    if (isPdf) {
+      try {
+        setExtracting(file.name);
+        uploadedFile.content = await extractPdfText(file);
+        setExtracting(null);
+      } catch (e) {
+        setExtracting(null);
+        console.error("PDF extraction failed:", e);
+        toast({
+          title: "PDF text extraction failed",
+          description: `Could not read "${file.name}". Try converting it to a .txt file.`,
+          variant: "destructive",
+        });
+      }
+    } else if (type === "code" || file.type === "text/plain") {
       try {
         uploadedFile.content = await file.text();
       } catch (e) {
         console.error("Could not read file content:", e);
-        toast({ title: "Failed to read file", description: "Some file contents may be unavailable.", variant: "destructive" });
       }
     }
-    
+
     return uploadedFile;
   };
 
@@ -133,6 +168,12 @@ export const FileUploadZone = ({ onFilesChange, files }: FileUploadZoneProps) =>
 
   return (
     <div className="space-y-3">
+      {extracting && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+          Extracting text from <span className="font-medium truncate max-w-[200px]">{extracting}</span>…
+        </div>
+      )}
       <div
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
@@ -228,6 +269,11 @@ export const FileUploadZone = ({ onFilesChange, files }: FileUploadZoneProps) =>
                     </p>
                     <p className="text-xs text-muted-foreground capitalize">
                       {uploadedFile.type} • {(uploadedFile.file.size / 1024).toFixed(1)} KB
+                      {uploadedFile.content
+                        ? ` • ${uploadedFile.content.length.toLocaleString()} chars extracted`
+                        : uploadedFile.type === "document"
+                        ? " • no text extracted"
+                        : ""}
                     </p>
                   </div>
                   

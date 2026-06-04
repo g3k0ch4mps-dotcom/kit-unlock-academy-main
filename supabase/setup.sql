@@ -8,9 +8,22 @@
 -- MIGRATION 1: Core enums, tables, RLS, triggers
 -- ============================================================
 
-CREATE TYPE public.app_role AS ENUM ('admin', 'instructor', 'learner');
-CREATE TYPE public.kit_category AS ENUM ('robotics', 'iot');
-CREATE TYPE public.content_block_type AS ENUM ('text', 'image', 'code', 'diagram', 'video', 'safety_note', 'tip');
+-- Note: If you get "type already exists" errors, the enums have already been created
+-- You can safely skip this section and run the rest of the script
+DO $$ BEGIN
+  CREATE TYPE public.app_role AS ENUM ('admin', 'instructor', 'learner');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE public.kit_category AS ENUM ('robotics', 'iot');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE public.content_block_type AS ENUM ('text', 'image', 'code', 'diagram', 'video', 'safety_note', 'tip');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE public.profiles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
