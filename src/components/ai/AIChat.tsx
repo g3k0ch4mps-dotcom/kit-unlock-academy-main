@@ -99,7 +99,22 @@ export const AIChat = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) {
+        // supabase-js hides the function's real error behind a generic message.
+        // The original Response is on error.context — read its JSON body for the
+        // actual reason (e.g. missing key, Gemini error).
+        let msg = res.error.message;
+        const ctx = (res.error as { context?: Response }).context;
+        if (ctx && typeof ctx.json === "function") {
+          try {
+            const body = await ctx.clone().json();
+            if (body?.error) msg = body.error;
+          } catch {
+            /* body wasn't JSON — keep the generic message */
+          }
+        }
+        throw new Error(msg);
+      }
 
       const reply = res.data?.reply;
       if (!reply) throw new Error("Empty response from AI");
