@@ -647,6 +647,10 @@ export type Database = {
           program_id: string | null
           redeemed_at: string | null
           redeemed_by: string | null
+          scope: string
+          access_days: number | null
+          max_uses: number | null
+          uses_count: number
         }
         Insert: {
           code: string
@@ -661,6 +665,10 @@ export type Database = {
           program_id?: string | null
           redeemed_at?: string | null
           redeemed_by?: string | null
+          scope?: string
+          access_days?: number | null
+          max_uses?: number | null
+          uses_count?: number
         }
         Update: {
           code?: string
@@ -675,6 +683,10 @@ export type Database = {
           program_id?: string | null
           redeemed_at?: string | null
           redeemed_by?: string | null
+          scope?: string
+          access_days?: number | null
+          max_uses?: number | null
+          uses_count?: number
         }
         Relationships: [
           {
@@ -692,6 +704,78 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      unlock_code_sessions: {
+        Row: {
+          id: string
+          unlock_code_id: string
+          session_id: string
+        }
+        Insert: {
+          id?: string
+          unlock_code_id: string
+          session_id: string
+        }
+        Update: {
+          id?: string
+          unlock_code_id?: string
+          session_id?: string
+        }
+        Relationships: []
+      }
+      user_session_access: {
+        Row: {
+          id: string
+          user_id: string
+          session_id: string
+          source: string
+          unlock_code_id: string | null
+          granted_at: string
+          expires_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          session_id: string
+          source?: string
+          unlock_code_id?: string | null
+          granted_at?: string
+          expires_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          session_id?: string
+          source?: string
+          unlock_code_id?: string | null
+          granted_at?: string
+          expires_at?: string | null
+        }
+        Relationships: []
+      }
+      code_redemptions: {
+        Row: {
+          id: string
+          unlock_code_id: string
+          user_id: string
+          redeemed_at: string
+          access_expires_at: string | null
+        }
+        Insert: {
+          id?: string
+          unlock_code_id: string
+          user_id: string
+          redeemed_at?: string
+          access_expires_at?: string | null
+        }
+        Update: {
+          id?: string
+          unlock_code_id?: string
+          user_id?: string
+          redeemed_at?: string
+          access_expires_at?: string | null
+        }
+        Relationships: []
       }
       user_assessments: {
         Row: {
@@ -738,6 +822,7 @@ export type Database = {
           unlock_code_id: string | null
           unlocked_at: string
           user_id: string
+          expires_at: string | null
         }
         Insert: {
           id?: string
@@ -745,6 +830,7 @@ export type Database = {
           unlock_code_id?: string | null
           unlocked_at?: string
           user_id: string
+          expires_at?: string | null
         }
         Update: {
           id?: string
@@ -752,6 +838,7 @@ export type Database = {
           unlock_code_id?: string | null
           unlocked_at?: string
           user_id?: string
+          expires_at?: string | null
         }
         Relationships: [
           {
@@ -1102,6 +1189,10 @@ export type Database = {
           is_used: boolean
           expires_at: string | null
         }[]
+      }
+      redeem_unlock_code: {
+        Args: { p_code: string }
+        Returns: Json
       }
     }
     Enums: {
