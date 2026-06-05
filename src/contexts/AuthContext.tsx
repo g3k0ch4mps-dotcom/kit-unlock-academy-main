@@ -110,10 +110,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const { data: existing } = await supabase
         .from("user_devices")
-        .select("id, sign_in_count")
+        .select("id, sign_in_count, is_revoked")
         .eq("user_id", userId)
         .eq("fingerprint", fingerprint)
         .maybeSingle();
+
+      // Enforce admin revocation: a revoked device cannot use the platform
+      if (existing?.is_revoked) {
+        toast({
+          title: "Device access revoked",
+          description: "Access from this device has been revoked by an administrator.",
+          variant: "destructive",
+        });
+        await supabase.auth.signOut();
+        setUser(null);
+        setSession(null);
+        setRoles([]);
+        return;
+      }
 
       if (existing) {
         await supabase

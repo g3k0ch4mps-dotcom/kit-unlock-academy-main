@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldOff, Loader2, Monitor, Smartphone, Tablet } from "lucide-react";
+import { ShieldOff, ShieldCheck, Loader2, Monitor, Smartphone, Tablet } from "lucide-react";
 
 interface UserDevice {
   id: string;
@@ -35,7 +35,7 @@ export const ActiveUsers = () => {
   const [devices, setDevices] = useState<UserDevice[]>([]);
   const [profiles, setProfiles] = useState<Record<string, UserProfile>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [revoking, setRevoking] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDevices();
@@ -68,19 +68,23 @@ export const ActiveUsers = () => {
     setIsLoading(false);
   };
 
-  const revokeDevice = async (deviceId: string) => {
-    setRevoking(deviceId);
+  const setDeviceRevoked = async (deviceId: string, revoked: boolean) => {
+    setBusyId(deviceId);
     const { error } = await supabase
       .from("user_devices")
-      .update({ is_revoked: true })
+      .update({ is_revoked: revoked })
       .eq("id", deviceId);
     if (error) {
-      toast({ title: "Error", description: "Failed to revoke device.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: `Failed to ${revoked ? "revoke" : "restore"} device.`,
+        variant: "destructive",
+      });
     } else {
-      toast({ title: "Device revoked" });
+      toast({ title: revoked ? "Device revoked" : "Device restored" });
       fetchDevices();
     }
-    setRevoking(null);
+    setBusyId(null);
   };
 
   if (isLoading) {
@@ -124,17 +128,29 @@ export const ActiveUsers = () => {
                   </p>
                 </div>
                 <div className="flex-shrink-0">
-                  {!d.is_revoked && (
+                  {d.is_revoked ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-success hover:text-success"
+                      onClick={() => setDeviceRevoked(d.id, false)}
+                      disabled={busyId === d.id}
+                      title="Restore device access"
+                      aria-label="Restore device access"
+                    >
+                      {busyId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                    </Button>
+                  ) : (
                     <Button
                       variant="ghost"
                       size="icon"
                       className="text-destructive hover:text-destructive"
-                      onClick={() => revokeDevice(d.id)}
-                      disabled={revoking === d.id}
+                      onClick={() => setDeviceRevoked(d.id, true)}
+                      disabled={busyId === d.id}
                       title="Revoke device"
                       aria-label="Revoke device"
                     >
-                      {revoking === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
+                      {busyId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
                     </Button>
                   )}
                 </div>
