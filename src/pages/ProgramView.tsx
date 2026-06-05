@@ -84,7 +84,7 @@ export const ProgramView = () => {
   const { id } = useParams();
    const { user } = useAuth();
   const { toast } = useToast();
-  const { awardXP, getUserXP } = useXP();
+  const { getUserXP, spendXP } = useXP();
   const [userXP, setUserXP] = useState<number>(0);
   const [unlockingSession, setUnlockingSession] = useState<string | null>(null);
   const [isRedeemModalOpen, setIsRedeemModalOpen] = useState(false);
@@ -150,7 +150,7 @@ export const ProgramView = () => {
           setSessionScores(Object.entries(bestScores).map(([session_id, score]) => ({ session_id, score })));
         }
 
-        setUserXP(xpData?.total_xp ?? 0);
+        setUserXP(xpData?.spendable_xp ?? 0);
       }
 
       setIsLoading(false);
@@ -238,23 +238,38 @@ export const ProgramView = () => {
     const xpCost = session?.xp_cost ?? 0;
     const alreadyHasProgress = progressData.some(p => p.session_id === sessionId);
 
-    // Auto-deduct XP if the session costs XP and hasn't been unlocked yet
+    // Spend XP to unlock a paid session the first time it's opened
     if (xpCost > 0 && !alreadyHasProgress) {
+      // Gate: previous session must be completed first (complete AND pay)
+      const idx = sessions.findIndex(s => s.id === sessionId);
+      const prev = idx > 0 ? sessions[idx - 1] : null;
+      const prevCompleted = prev
+        ? progressData.some(p => p.session_id === prev.id && p.completed)
+        : true;
+      if (!session?.is_free && !prevCompleted) {
+        toast({ title: "Locked", description: "Complete the previous session first.", variant: "destructive" });
+        return;
+      }
+
       if (userXP < xpCost) {
         toast({ title: "Not enough XP", description: `You need ${xpCost} XP to access this session.`, variant: "destructive" });
         return;
       }
 
       setUnlockingSession(sessionId);
-      const newTotal = userXP - xpCost;
-      await supabase.from("user_xp").update({ total_xp: newTotal }).eq("user_id", user.id);
-      await supabase.from("xp_transactions").insert({
-        user_id: user.id,
-        amount: -xpCost,
-        reason: `Unlocked session: ${session?.title}`,
-        reference_type: "session",
-        reference_id: sessionId,
-      });
+      // Atomic, balance-checked spend against the spendable wallet (server-side)
+      const result = await spendXP(user.id, xpCost, `Unlocked session: ${session?.title}`, "session", sessionId);
+
+      if (result.error) {
+        setUnlockingSession(null);
+        toast({
+          title: "Could not unlock",
+          description: result.error === "Insufficient XP" ? "Not enough XP" : result.error,
+          variant: "destructive",
+        });
+        return;
+      }
+
       await supabase.from("session_progress").upsert({
         user_id: user.id,
         session_id: sessionId,
@@ -262,8 +277,7 @@ export const ProgramView = () => {
         progress_percentage: 0,
       }, { onConflict: "user_id,session_id" });
 
-      setUserXP(newTotal);
-      await fetchProgress();
+      setUserXP(result.data?.spendable_xp ?? (userXP - xpCost));
       setUnlockingSession(null);
 
       toast({ title: `-${xpCost} XP`, description: `Unlocked "${session?.title}"` });
@@ -662,11 +676,9 @@ export const ProgramView = () => {
         isOpen={isRedeemModalOpen} 
         onClose={() => setIsRedeemModalOpen(false)}
         onCodeRedeemed={(_programId, _programTitle) => {
-          // Refresh access + sessions in-place so sessions unlock immediately
+          // Refresh access + sessions so newly unlocked content appears
           setIsRedeemModalOpen(false);
-          checkAccess();
-          fetchSessions();
-          if (user) fetchProgress();
+          window.location.reload();
         }}
       />
       

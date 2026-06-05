@@ -832,6 +832,7 @@ export type Database = {
           id: string
           user_id: string
           total_xp: number
+          spendable_xp: number
           level: number
           updated_at: string
         }
@@ -839,6 +840,7 @@ export type Database = {
           id?: string
           user_id: string
           total_xp?: number
+          spendable_xp?: number
           level?: number
           updated_at?: string
         }
@@ -846,6 +848,7 @@ export type Database = {
           id?: string
           user_id?: string
           total_xp?: number
+          spendable_xp?: number
           level?: number
           updated_at?: string
         }
@@ -1057,6 +1060,30 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      award_xp: {
+        Args: {
+          p_user_id: string
+          p_amount: number
+          p_reason: string
+          p_reference_type?: string | null
+          p_reference_id?: string | null
+        }
+        Returns: Json
+      }
+      spend_xp: {
+        Args: {
+          p_user_id: string
+          p_amount: number
+          p_reason: string
+          p_reference_type?: string | null
+          p_reference_id?: string | null
+        }
+        Returns: Json
+      }
+      reset_session_xp: {
+        Args: { p_user_id: string; p_session_id: string }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

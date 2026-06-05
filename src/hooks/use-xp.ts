@@ -2,10 +2,14 @@ import { useCallback } from "react"
 import { supabase } from "@/integrations/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 
+// Balanced economy: completing a module pays SESSION_COMPLETE, which must be
+// >= a paid session's unlock cost so learners are never stuck. QUIZ_PASS and
+// login are the surplus that builds toward the store. Recommended unlock
+// cost per paid session: 15 (<= SESSION_COMPLETE).
 const XP_VALUES = {
   DAILY_LOGIN: 2,
-  SESSION_COMPLETE: 5,
-  QUIZ_PASS: 10,
+  SESSION_COMPLETE: 20,
+  QUIZ_PASS: 15,
   TEST_PASS: 50,
   PROGRAM_COMPLETE: 100,
 } as const
@@ -37,7 +41,7 @@ export function useXP() {
   const getUserXP = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from("user_xp")
-      .select("user_id, total_xp, level")
+      .select("user_id, total_xp, spendable_xp, level")
       .eq("user_id", userId)
       .maybeSingle()
 
@@ -49,14 +53,14 @@ export function useXP() {
       const { data: inserted, error: insertError } = await supabase
         .from("user_xp")
         .insert({ user_id: userId })
-        .select("user_id, total_xp, level")
+        .select("user_id, total_xp, spendable_xp, level")
         .maybeSingle()
 
       if (insertError) {
         console.error("getUserXP insert error:", insertError)
       }
 
-      return inserted ?? { user_id: userId, total_xp: 0, level: 1 }
+      return inserted ?? { user_id: userId, total_xp: 0, spendable_xp: 0, level: 1 }
     }
     return data
   }, [])
@@ -91,8 +95,32 @@ export function useXP() {
       description: reason,
     })
 
-    return data as { total_xp: number; level: number }
+    return data as { total_xp: number; spendable_xp: number; level: number }
   }, [getUserXP, toast])
+
+  // Spend from the SPENDABLE wallet (unlock sessions, store, etc.).
+  // Atomic + balance-checked server-side; lifetime XP & level are untouched.
+  const spendXP = useCallback(async (
+    userId: string,
+    amount: number,
+    reason: string,
+    referenceType?: string,
+    referenceId?: string,
+  ) => {
+    const { data, error } = await supabase.rpc("spend_xp", {
+      p_user_id: userId,
+      p_amount: amount,
+      p_reason: reason,
+      p_reference_type: referenceType ?? null,
+      p_reference_id: referenceId ?? null,
+    })
+
+    if (error) {
+      return { error: error.message || "Could not spend XP" }
+    }
+
+    return { data: data as { total_xp: number; spendable_xp: number; level: number } }
+  }, [])
 
   const awardQuizXP = useCallback(async (
     userId: string,
@@ -145,6 +173,7 @@ export function useXP() {
   return {
     getUserXP,
     awardXP,
+    spendXP,
     awardQuizXP,
     awardSessionXP,
     awardTestXP,

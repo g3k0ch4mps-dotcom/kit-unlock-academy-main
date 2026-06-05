@@ -21,12 +21,12 @@ export const Header = () => {
 
   const isAuthenticated = !!user;
 
-  const navLinks = isAuthenticated
+  const navLinks: { href: string; label: string; external?: boolean }[] = isAuthenticated
     ? [
         { href: "/dashboard", label: "Dashboard" },
-        { href: "/kits", label: "My Kits" },
         { href: "/programs", label: "Programs" },
-        { href: "/store", label: "Store" },
+        { href: "/kits", label: "My Kits" },
+        { href: "https://shop.mamuzaengineering.com", label: "Store", external: true },
       ]
     : [
         { href: "/#features", label: "Features" },
@@ -48,19 +48,31 @@ export const Header = () => {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-8">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              to={link.href}
-              className={`text-sm font-medium transition-colors hover:text-primary ${
-                location.pathname === link.href
-                  ? "text-primary"
-                  : "text-muted-foreground"
-              }`}
-            >
-              {link.label}
-            </Link>
-          ))}
+          {navLinks.map((link) =>
+            link.external ? (
+              <a
+                key={link.href}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium transition-colors hover:text-primary text-muted-foreground"
+              >
+                {link.label}
+              </a>
+            ) : (
+              <Link
+                key={link.href}
+                to={link.href}
+                className={`text-sm font-medium transition-colors hover:text-primary ${
+                  location.pathname === link.href
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {link.label}
+              </Link>
+            )
+          )}
           {isAuthenticated && isAdmin && (
             <Link
               to="/admin"
@@ -92,6 +104,12 @@ export const Header = () => {
                   <Link to="/profile" className="cursor-pointer">
                     <User className="h-4 w-4 mr-2" />
                     Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/store" className="cursor-pointer">
+                    <ShoppingBag className="h-4 w-4 mr-2" />
+                    Rewards
                   </Link>
                 </DropdownMenuItem>
                 {isAdmin && (
@@ -136,16 +154,29 @@ export const Header = () => {
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-border bg-card animate-slide-up">
           <nav className="container py-4 flex flex-col gap-2">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                to={link.href}
-                className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-muted transition-colors"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {navLinks.map((link) =>
+              link.external ? (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-muted transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.href}
+                  to={link.href}
+                  className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-muted transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              )
+            )}
             {isAuthenticated && isAdmin && (
               <Link
                 to="/admin"
@@ -160,6 +191,9 @@ export const Header = () => {
                 <>
                   <Button variant="ghost" asChild>
                     <Link to="/profile" onClick={() => setMobileMenuOpen(false)}>Profile</Link>
+                  </Button>
+                  <Button variant="ghost" asChild>
+                    <Link to="/store" onClick={() => setMobileMenuOpen(false)}>Rewards</Link>
                   </Button>
                   <Button variant="outline" onClick={() => { handleLogout(); setMobileMenuOpen(false); }}>
                     Logout

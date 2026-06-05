@@ -67,18 +67,22 @@ export function useRedemptions(userId: string | undefined) {
   }
 
   const redeemItem = useCallback(async (item: StoreItem, userId: string) => {
-    const { data: xp } = await supabase
-      .from("user_xp")
-      .select("total_xp")
-      .eq("user_id", userId)
-      .maybeSingle()
-
-    if (!xp || xp.total_xp < item.xp_cost) {
-      return { error: "Not enough XP" }
-    }
-
     if (item.stock !== null && item.stock !== -1 && item.stock <= 0) {
       return { error: "Item out of stock" }
+    }
+
+    // Atomic, balance-checked spend against the spendable wallet.
+    // Lifetime XP / level stay intact, so redeeming never demotes the user.
+    const { error: spendError } = await supabase.rpc("spend_xp", {
+      p_user_id: userId,
+      p_amount: item.xp_cost,
+      p_reason: `Redeemed: ${item.name}`,
+      p_reference_type: "store_item",
+      p_reference_id: item.id,
+    })
+
+    if (spendError) {
+      return { error: /insufficient/i.test(spendError.message) ? "Not enough XP" : spendError.message }
     }
 
     const { error: redemptionError } = await supabase
@@ -91,14 +95,16 @@ export function useRedemptions(userId: string | undefined) {
       })
 
     if (redemptionError) {
+      // Refund the spend if we couldn't record the redemption
+      await supabase.rpc("award_xp", {
+        p_user_id: userId,
+        p_amount: item.xp_cost,
+        p_reason: `Refund (redemption failed): ${item.name}`,
+        p_reference_type: "store_item",
+        p_reference_id: item.id,
+      })
       return { error: redemptionError.message }
     }
-
-    const newTotal = xp.total_xp - item.xp_cost
-    await supabase
-      .from("user_xp")
-      .update({ total_xp: newTotal })
-      .eq("user_id", userId)
 
     if (item.stock !== null && item.stock !== -1) {
       await supabase

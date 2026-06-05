@@ -61,6 +61,7 @@ interface Session {
   title: string;
   session_order: number;
   is_free: boolean;
+  xp_cost: number | null;
 }
 
 interface ContentBlock {
@@ -165,6 +166,7 @@ export const SessionContentEditor = forwardRef<SessionContentEditorRef, SessionC
       session_order: 1,
       is_free: false,
       duration_minutes: 30,
+      xp_cost: 15,
     });
     
     const [blockForm, setBlockForm] = useState({
@@ -535,6 +537,7 @@ export const SessionContentEditor = forwardRef<SessionContentEditorRef, SessionC
         session_order: sessions.length + 1,
         is_free: sessions.length < 2,
         duration_minutes: 30,
+        xp_cost: 15,
       });
       setIsSessionDialogOpen(true);
     };
@@ -547,6 +550,7 @@ export const SessionContentEditor = forwardRef<SessionContentEditorRef, SessionC
         session_order: session.session_order,
         is_free: session.is_free,
         duration_minutes: 30,
+        xp_cost: session.xp_cost ?? 0,
       });
       setIsSessionDialogOpen(true);
     };
@@ -563,6 +567,7 @@ export const SessionContentEditor = forwardRef<SessionContentEditorRef, SessionC
             session_order: sessionForm.session_order,
             is_free: sessionForm.is_free,
             duration_minutes: sessionForm.duration_minutes,
+            xp_cost: (!sessionForm.is_free && sessionForm.xp_cost > 0) ? sessionForm.xp_cost : null,
           })
           .eq("id", editingSession.id);
 
@@ -581,6 +586,7 @@ export const SessionContentEditor = forwardRef<SessionContentEditorRef, SessionC
             session_order: sessionForm.session_order,
             is_free: sessionForm.is_free,
             duration_minutes: sessionForm.duration_minutes,
+            xp_cost: (!sessionForm.is_free && sessionForm.xp_cost > 0) ? sessionForm.xp_cost : null,
           });
 
         if (error) {
@@ -1013,6 +1019,22 @@ export const SessionContentEditor = forwardRef<SessionContentEditorRef, SessionC
                     min={5}
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Unlock cost (XP)</Label>
+                <Input
+                  type="number"
+                  value={sessionForm.xp_cost}
+                  onChange={(e) => setSessionForm({ ...sessionForm, xp_cost: Math.max(0, parseInt(e.target.value) || 0) })}
+                  min={0}
+                  disabled={sessionForm.is_free}
+                  placeholder="0 = no XP required"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Spendable XP a learner must pay to unlock this session. The previous session must also be
+                  completed first. Keep this at or below 20 (what completing a session pays) so learners are
+                  never stuck — recommended 15. Set to 0 for no cost.
+                </p>
               </div>
               <div className="flex items-center gap-3">
                 <input
