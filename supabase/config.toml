@@ -1,1 +1,8 @@
 project_id = "inzxtybkqwagwgjvdbes"
+
+# chat-ai verifies the JWT itself (reads Authorization, calls auth.getUser) and
+# handles its own CORS/OPTIONS. The platform JWT gate must be OFF, otherwise the
+# unauthenticated CORS preflight (OPTIONS) is rejected with a non-2xx status and
+# the browser blocks the request.
+[functions.chat-ai]
+verify_jwt = false
