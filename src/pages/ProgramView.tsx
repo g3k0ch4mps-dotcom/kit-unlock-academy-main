@@ -662,7 +662,11 @@ export const ProgramView = () => {
               <p className="text-sm text-muted-foreground mb-4">
                 Stuck on a step? Our AI assistant knows your exact kit.
               </p>
-              <Button variant="outline" className="w-full">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => window.dispatchEvent(new Event("open-ai-chat"))}
+              >
                 Ask AI Assistant
               </Button>
             </div>

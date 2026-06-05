@@ -48,6 +48,13 @@ export const AIChat = () => {
     }
   }, [open]);
 
+  // Allow other parts of the app (e.g. "Ask AI Assistant" buttons) to open the widget
+  useEffect(() => {
+    const handleOpen = () => setOpen(true);
+    window.addEventListener("open-ai-chat", handleOpen);
+    return () => window.removeEventListener("open-ai-chat", handleOpen);
+  }, []);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
