@@ -364,15 +364,11 @@ CREATE POLICY "Admins can manage sessions" ON public.sessions FOR ALL TO authent
   WITH CHECK (public.is_admin_or_instructor(auth.uid()));
 
 -- CONTENT BLOCKS
-CREATE POLICY "Users can view free content" ON public.content_blocks FOR SELECT
+-- Free content is publicly previewable. The access-gated SELECT policy
+-- (can_access_session) is defined at the end of this file, after the
+-- user_session_access table it depends on has been created.
+CREATE POLICY "View free content" ON public.content_blocks FOR SELECT
   USING (EXISTS (SELECT 1 FROM sessions s WHERE s.id = content_blocks.session_id AND s.is_free = true));
-CREATE POLICY "Users can view unlocked content" ON public.content_blocks FOR SELECT TO authenticated
-  USING (EXISTS (
-    SELECT 1 FROM sessions s
-    JOIN programs p ON p.id = s.program_id
-    JOIN user_program_access upa ON upa.program_id = p.id
-    WHERE s.id = content_blocks.session_id AND upa.user_id = auth.uid()
-  ));
 CREATE POLICY "Admins can manage content" ON public.content_blocks FOR ALL TO authenticated
   USING (public.is_admin_or_instructor(auth.uid()))
   WITH CHECK (public.is_admin_or_instructor(auth.uid()));
@@ -1174,3 +1170,43 @@ $$;
 
 REVOKE ALL ON FUNCTION public.redeem_unlock_code(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.redeem_unlock_code(TEXT) TO authenticated;
+
+
+-- ============================================================
+-- content_blocks access gate (depends on user_session_access above)
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.can_access_session(p_session_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    public.is_admin_or_instructor(auth.uid())
+    OR EXISTS (
+      SELECT 1 FROM public.sessions s
+      WHERE s.id = p_session_id AND s.is_free = true
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.sessions s
+      JOIN public.user_program_access upa ON upa.program_id = s.program_id
+      WHERE s.id = p_session_id
+        AND upa.user_id = auth.uid()
+        AND (upa.expires_at IS NULL OR upa.expires_at > now())
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.user_session_access usa
+      WHERE usa.session_id = p_session_id
+        AND usa.user_id = auth.uid()
+        AND (usa.expires_at IS NULL OR usa.expires_at > now())
+    );
+$$;
+REVOKE ALL ON FUNCTION public.can_access_session(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.can_access_session(UUID) TO authenticated, anon;
+
+DROP POLICY IF EXISTS "Users can view unlocked content" ON public.content_blocks;
+DROP POLICY IF EXISTS "View accessible content" ON public.content_blocks;
+CREATE POLICY "View accessible content" ON public.content_blocks FOR SELECT TO authenticated
+  USING (public.can_access_session(content_blocks.session_id));

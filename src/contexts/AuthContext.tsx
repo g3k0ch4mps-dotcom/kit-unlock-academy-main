@@ -102,6 +102,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Re-check device revocation when the user refocuses the tab, so a revoked
+  // device is signed out within seconds instead of only at next login/reload.
+  useEffect(() => {
+    if (!user) return;
+    const recheck = async () => {
+      try {
+        const fp = await FingerprintJS.load();
+        const { visitorId } = await fp.get();
+        const { data } = await supabase
+          .from("user_devices")
+          .select("is_revoked")
+          .eq("user_id", user.id)
+          .eq("fingerprint", visitorId)
+          .maybeSingle();
+        if (data?.is_revoked) {
+          toast({
+            title: "Device access revoked",
+            description: "Access from this device has been revoked by an administrator.",
+            variant: "destructive",
+          });
+          await supabase.auth.signOut();
+          setUser(null);
+          setSession(null);
+          setRoles([]);
+        }
+      } catch {
+        /* ignore transient fingerprint/network errors */
+      }
+    };
+    window.addEventListener("focus", recheck);
+    return () => window.removeEventListener("focus", recheck);
+  }, [user]);
+
   const recordDeviceFingerprint = async (userId: string) => {
     try {
       const fp = await FingerprintJS.load();
