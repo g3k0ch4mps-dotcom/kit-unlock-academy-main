@@ -443,12 +443,16 @@ export const ProgramView = () => {
                     : null;
                   const xpCost = session.xp_cost ?? 0;
                   const alreadyUnlocked = hasProgress;
-                  const prevSession = index > 0 ? sessions[index - 1] : null;
-                  const isPrevCompleted = prevSession
-                    ? progressData.some(p => p.session_id === prevSession.id && p.completed)
-                    : true;
-                  // Blocked by previous session not completed
-                  const needsPrevGate = !alreadyUnlocked && !isPrevCompleted && !session.is_free && index > 0;
+                  // Sequential rule: every EARLIER module the student can access must be
+                  // completed first. Accessible = free, active program grant, or active
+                  // session grant. Non-accessible modules are skipped (not required), so a
+                  // {2,6,9} code becomes 2 -> 6 -> 9, while full access stays 1 -> 2 -> 3.
+                  const earlierAccessibleIncomplete = sessions.some((s, i) =>
+                    i < index &&
+                    (s.is_free || hasAccess || Object.prototype.hasOwnProperty.call(sessionAccess, s.id)) &&
+                    !progressData.some(p => p.session_id === s.id && p.completed)
+                  );
+                  const needsPrevGate = !alreadyUnlocked && !session.is_free && earlierAccessibleIncomplete;
                   // Needs XP unlock if: not locked by program access, has xp_cost, and not already started
                   const needsXp = !isLocked && xpCost > 0 && !alreadyUnlocked;
                   // Can afford XP unlock
@@ -529,8 +533,8 @@ export const ProgramView = () => {
                       </span>
                       
                       {needsPrevGate ? (
-                        <span className="text-xs text-muted-foreground text-center max-w-[100px] leading-tight">
-                          Complete previous session first
+                        <span className="text-xs text-muted-foreground text-center max-w-[110px] leading-tight">
+                          Complete earlier modules first
                         </span>
                       ) : needsXp ? (
                         <Button

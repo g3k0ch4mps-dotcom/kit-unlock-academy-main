@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/layout/Logo";
@@ -38,6 +38,7 @@ import { ContentBlockRenderer } from "@/components/content/ContentBlockRenderer"
    session_order: number;
    program_id: string;
    simulation_url: string | null;
+   is_free: boolean;
  }
  
  interface ContentBlock {
@@ -57,7 +58,8 @@ import { ContentBlockRenderer } from "@/components/content/ContentBlockRenderer"
 
 export const SessionView = () => {
   const { programId, sessionId } = useParams();
-   const { user } = useAuth();
+  const navigate = useNavigate();
+   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const { awardQuizXP, awardSessionXP, awardXP } = useXP();
   const { updateStreak } = useStreak(user?.id);
@@ -138,13 +140,62 @@ export const SessionView = () => {
 
       // Phase 2: queries that depend on session data
       if (sessionData) {
-        const [programResult, allSessionsResult] = await Promise.all([
+        const [programResult, allSessionsResult, progAccessResult, sessAccessResult, allProgressResult] = await Promise.all([
           supabase.from("programs").select("id, title").eq("id", sessionData.program_id).maybeSingle(),
           supabase.from("sessions").select("*").eq("program_id", sessionData.program_id).order("session_order"),
+          user
+            ? supabase.from("user_program_access").select("expires_at").eq("program_id", sessionData.program_id).eq("user_id", user.id).maybeSingle()
+            : Promise.resolve({ data: null }),
+          user
+            ? supabase.from("user_session_access").select("session_id, expires_at").eq("user_id", user.id)
+            : Promise.resolve({ data: [] }),
+          user
+            ? supabase.from("session_progress").select("session_id, completed").eq("user_id", user.id)
+            : Promise.resolve({ data: [] }),
         ]);
 
         if (programResult.data) {
           setProgram(programResult.data);
+        }
+
+        // ── Access + sequential prerequisite guard (admins/instructors bypass) ──
+        // Stops direct-URL access to locked modules and enforces "complete every
+        // earlier ACCESSIBLE module first" — works for both full-program access
+        // (1->2->3) and module codes like {2,6,9} (2->6->9).
+        if (user && !isAdmin && allSessionsResult.data) {
+          const nowMs = Date.now();
+          const progRow = progAccessResult.data as { expires_at: string | null } | null;
+          const programActive = !!progRow && (!progRow.expires_at || new Date(progRow.expires_at).getTime() > nowMs);
+          const grantSet = new Set(
+            ((sessAccessResult.data ?? []) as { session_id: string; expires_at: string | null }[])
+              .filter((r) => !r.expires_at || new Date(r.expires_at).getTime() > nowMs)
+              .map((r) => r.session_id)
+          );
+          const completedSet = new Set(
+            ((allProgressResult.data ?? []) as { session_id: string; completed: boolean }[])
+              .filter((p) => p.completed)
+              .map((p) => p.session_id)
+          );
+          const isAccessible = (s: SessionData) => s.is_free || programActive || grantSet.has(s.id);
+
+          if (!isAccessible(sessionData)) {
+            toast({ title: "Locked", description: "You don't have access to this module.", variant: "destructive" });
+            navigate(`/programs/${sessionData.program_id}`);
+            return;
+          }
+
+          const earlierBlocked = (allSessionsResult.data as SessionData[]).some(
+            (s) => s.session_order < sessionData.session_order && isAccessible(s) && !completedSet.has(s.id)
+          );
+          if (earlierBlocked) {
+            toast({
+              title: "Complete earlier modules first",
+              description: "Finish the earlier modules you have access to before opening this one.",
+              variant: "destructive",
+            });
+            navigate(`/programs/${sessionData.program_id}`);
+            return;
+          }
         }
 
         if (allSessionsResult.data) {
