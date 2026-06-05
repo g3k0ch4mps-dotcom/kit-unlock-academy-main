@@ -257,9 +257,11 @@ export const ProgramView = () => {
     const session = sessions.find(s => s.id === sessionId);
     const xpCost = session?.xp_cost ?? 0;
     const alreadyHasProgress = progressData.some(p => p.session_id === sessionId);
+    const hasSessionGrant = Object.prototype.hasOwnProperty.call(sessionAccess, sessionId);
 
-    // Spend XP to unlock a paid session the first time it's opened
-    if (xpCost > 0 && !alreadyHasProgress) {
+    // Spend XP to unlock a paid session the first time it's opened — unless a code
+    // already granted this exact session (the code is the unlock, no XP charge).
+    if (xpCost > 0 && !alreadyHasProgress && !hasSessionGrant) {
       // Gate: previous session must be completed first (complete AND pay)
       const idx = sessions.findIndex(s => s.id === sessionId);
       const prev = idx > 0 ? sessions[idx - 1] : null;
@@ -454,8 +456,9 @@ export const ProgramView = () => {
                     !progressData.some(p => p.session_id === s.id && p.completed)
                   );
                   const needsPrevGate = !alreadyUnlocked && !session.is_free && earlierGrantedIncomplete;
-                  // Needs XP unlock if: not locked by program access, has xp_cost, and not already started
-                  const needsXp = !isLocked && xpCost > 0 && !alreadyUnlocked;
+                  // Needs XP unlock if: not locked, has xp_cost, not already started, AND not
+                  // already granted by a code. A session-grant code IS the unlock — no extra XP.
+                  const needsXp = !isLocked && xpCost > 0 && !alreadyUnlocked && !hasSessionGrant;
                   // Can afford XP unlock
                   const canAfford = needsXp && userXP >= xpCost;
                   const quizScore = sessionScores.find(s => s.session_id === session.id);
@@ -511,7 +514,7 @@ export const ProgramView = () => {
                       <h3 className={`font-medium ${isLocked ? "text-muted-foreground" : ""}`}>
                         {session.title}
                       </h3>
-                      {!isLocked && xpCost > 0 && (
+                      {!isLocked && xpCost > 0 && !hasSessionGrant && (
                         <p className={`text-xs mt-0.5 ${canAfford ? "text-yellow-600" : "text-destructive"}`}>
                           Cost: {xpCost} XP · You have: {userXP} XP
                         </p>
