@@ -19,68 +19,59 @@ import {
   ShieldOff,
   TimerOff,
   UserCheck,
-  Link2Off,
   WifiOff,
+  Clock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { useXP } from "@/hooks/use-xp";
 
 interface RedeemCodeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCodeRedeemed?: (programId: string, programTitle: string) => void;
+  onCodeRedeemed?: (programId: string | null, programTitle: string) => void;
 }
 
 type RedeemState = "idle" | "loading" | "success" | "error";
 
 type ErrorKind =
   | "not_found"
-  | "already_used"
+  | "already_redeemed"
+  | "used_up"
   | "expired"
-  | "already_has_access"
-  | "no_program"
   | "network"
   | "generic";
 
 interface ErrorInfo {
-  kind: ErrorKind;
   message: string;
   hint: string;
   icon: React.ComponentType<{ className?: string }>;
   canRetry: boolean;
 }
 
-const ERROR_MAP: Record<ErrorKind, Omit<ErrorInfo, "kind">> = {
+const ERROR_MAP: Record<ErrorKind, ErrorInfo> = {
   not_found: {
     message: "Code not found",
-    hint: "Double-check for typos — codes are case-insensitive. Make sure you're using the full code from your kit.",
+    hint: "Double-check for typos — codes are case-insensitive. Make sure you're using the full code you were given.",
     icon: AlertCircle,
     canRetry: true,
   },
-  already_used: {
-    message: "Code already redeemed",
-    hint: "This single-use code was already used by another account. Contact support if you believe this is a mistake.",
+  already_redeemed: {
+    message: "You've already redeemed this code",
+    hint: "This code is already on your account. Head to your dashboard to continue — if your access expired, ask for a fresh code.",
+    icon: UserCheck,
+    canRetry: false,
+  },
+  used_up: {
+    message: "Code fully used",
+    hint: "This code has reached its maximum number of redemptions. Contact your instructor for another one.",
     icon: ShieldOff,
     canRetry: false,
   },
   expired: {
     message: "Code has expired",
-    hint: "This code is past its validity date. Contact support to get a replacement code.",
+    hint: "This code is past its validity date and can no longer be redeemed. Ask for a replacement code.",
     icon: TimerOff,
-    canRetry: false,
-  },
-  already_has_access: {
-    message: "You already have access",
-    hint: "Your account already has full access to this program. Head to your dashboard to continue learning.",
-    icon: UserCheck,
-    canRetry: false,
-  },
-  no_program: {
-    message: "Code not linked to a program",
-    hint: "This code exists but isn't connected to any program yet. Please contact support.",
-    icon: Link2Off,
     canRetry: false,
   },
   network: {
@@ -97,6 +88,30 @@ const ERROR_MAP: Record<ErrorKind, Omit<ErrorInfo, "kind">> = {
   },
 };
 
+interface RedeemResult {
+  ok: boolean;
+  error?: string;
+  scope?: "program" | "sessions";
+  program_id?: string | null;
+  session_titles?: string[];
+  xp_reward?: number | null;
+  access_expires_at?: string | null;
+}
+
+const ERROR_KINDS: ErrorKind[] = ["not_found", "already_redeemed", "used_up", "expired", "network", "generic"];
+const toErrorKind = (code: string | undefined): ErrorKind =>
+  (ERROR_KINDS.includes(code as ErrorKind) ? code : "generic") as ErrorKind;
+
+function formatExpiry(iso: string): string {
+  const date = new Date(iso);
+  const days = Math.max(0, Math.ceil((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+  return `${days} day${days !== 1 ? "s" : ""} (until ${date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  })})`;
+}
+
 export const RedeemCodeModal = ({
   isOpen,
   onClose,
@@ -105,12 +120,10 @@ export const RedeemCodeModal = ({
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { awardXP } = useXP();
   const [code, setCode] = useState("");
   const [state, setState] = useState<RedeemState>("idle");
   const [errorKind, setErrorKind] = useState<ErrorKind>("generic");
-  const [redeemedProgramId, setRedeemedProgramId] = useState<string | null>(null);
-  const [redeemedProgramTitle, setRedeemedProgramTitle] = useState("");
+  const [result, setResult] = useState<RedeemResult | null>(null);
 
   const setError = (kind: ErrorKind) => {
     setErrorKind(kind);
@@ -124,13 +137,8 @@ export const RedeemCodeModal = ({
       setError("not_found");
       return;
     }
-
     if (!user) {
-      toast({
-        title: "Not logged in",
-        description: "Please log in before redeeming a code.",
-        variant: "destructive",
-      });
+      toast({ title: "Not logged in", description: "Please log in before redeeming a code.", variant: "destructive" });
       return;
     }
 
@@ -139,148 +147,45 @@ export const RedeemCodeModal = ({
     try {
       const normalizedCode = code.toUpperCase().trim();
 
-      // 1. Look up the code via a SECURITY DEFINER RPC so users cannot enumerate
-      //    the unlock_codes table — they can only resolve a code they already know.
-      const { data: lookupRows, error: findError } = await supabase
-        .rpc("lookup_unlock_code", { p_code: normalizedCode });
+      // One atomic server-side call: validates, grants scoped/expiring access,
+      // awards XP, counts the use — all race-free.
+      const { data, error } = await supabase.rpc("redeem_unlock_code", { p_code: normalizedCode });
 
-      if (findError) {
-        console.error("DB error looking up code:", findError);
-        toast({ title: "Network error", description: "Failed to look up code. Please try again.", variant: "destructive" });
+      if (error) {
+        console.error("redeem_unlock_code error:", error);
         setError("network");
         return;
       }
 
-      const unlockCode = Array.isArray(lookupRows) ? lookupRows[0] : lookupRows;
+      const res = data as RedeemResult;
 
-      if (!unlockCode) {
-        setError("not_found");
+      if (!res?.ok) {
+        setError(toErrorKind(res?.error));
         return;
       }
 
-      if (unlockCode.is_used) {
-        setError("already_used");
-        return;
-      }
-
-      if (unlockCode.expires_at && new Date(unlockCode.expires_at) < new Date()) {
-        setError("expired");
-        return;
-      }
-
-      // 2. Resolve program from code or kit
-      let programId = unlockCode.program_id;
-      let programTitle = "";
-
-      if (programId) {
-        const { data: prog } = await supabase
-          .from("programs")
-          .select("id, title")
-          .eq("id", programId)
-          .maybeSingle();
-        programTitle = prog?.title || "Program";
-      } else if (unlockCode.kit_id) {
-        const { data: prog } = await supabase
-          .from("programs")
-          .select("id, title")
-          .eq("kit_id", unlockCode.kit_id)
-          .limit(1)
-          .maybeSingle();
-        if (!prog) {
-          setError("no_program");
-          return;
-        }
-        programId = prog.id;
-        programTitle = prog.title;
-      } else {
-        setError("no_program");
-        return;
-      }
-
-      // 3. Check existing access
-      const { data: existingAccess } = await supabase
-        .from("user_program_access")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("program_id", programId)
-        .maybeSingle();
-
-      if (existingAccess) {
-        setError("already_has_access");
-        return;
-      }
-
-      // 4. Mark code as used
-      const { error: updateError } = await supabase
-        .from("unlock_codes")
-        .update({
-          is_used: true,
-          redeemed_by: user.id,
-          redeemed_at: new Date().toISOString(),
-        })
-        .eq("id", unlockCode.id);
-
-      if (updateError) {
-        console.error("Failed to mark code used:", updateError);
-        toast({ title: "Network error", description: "Failed to redeem code. Please try again.", variant: "destructive" });
-        setError("network");
-        return;
-      }
-
-      // 5a. Award XP if code has xp_reward
-      if (unlockCode.xp_reward) {
-        await awardXP(user.id, unlockCode.xp_reward, `Redeemed code: ${normalizedCode}`, "redeem_code", unlockCode.id);
-      }
-
-      // 5b. Grant program access (if linked to a program)
-      if (programId) {
-        const { error: accessError } = await supabase
-          .from("user_program_access")
-          .insert({
-            user_id: user.id,
-            program_id: programId,
-            unlock_code_id: unlockCode.id,
-          });
-
-        if (accessError) {
-          console.error("Failed to grant access:", accessError);
-          toast({ title: "Network error", description: "Failed to grant program access. Please try again.", variant: "destructive" });
-          setError("network");
-          return;
-        }
-      }
-
-      setRedeemedProgramId(programId);
-      setRedeemedProgramTitle(programTitle || (unlockCode.xp_reward ? `+${unlockCode.xp_reward} XP` : ""));
+      setResult(res);
       setState("success");
+      onCodeRedeemed?.(res.program_id ?? null, "");
 
-      // Notify parent so it can refresh state without full reload
-      onCodeRedeemed?.(programId, programTitle);
-
-      toast({
-        title: "🎉 Code Redeemed!",
-        description: `You now have full access to "${programTitle}".`,
-      });
-    } catch (error) {
-      console.error("Unexpected redemption error:", error);
-      toast({ title: "Unexpected error", description: "Something went wrong. Please try again.", variant: "destructive" });
+      toast({ title: "🎉 Code Redeemed!", description: "Your access has been unlocked." });
+    } catch (err) {
+      console.error("Unexpected redemption error:", err);
       setError("generic");
     }
   };
 
   const handleStartLearning = () => {
-    if (redeemedProgramId) {
-      handleClose();
-      navigate(`/programs/${redeemedProgramId}`);
-    }
+    const programId = result?.program_id;
+    handleClose();
+    if (programId) navigate(`/programs/${programId}`);
   };
 
   const handleClose = () => {
     setCode("");
     setState("idle");
     setErrorKind("generic");
-    setRedeemedProgramId(null);
-    setRedeemedProgramTitle("");
+    setResult(null);
     onClose();
   };
 
@@ -295,31 +200,57 @@ export const RedeemCodeModal = ({
   const errorInfo = ERROR_MAP[errorKind];
   const ErrorIcon = errorInfo?.icon ?? AlertCircle;
 
+  const moduleCount = result?.session_titles?.length ?? 0;
+  const isSessionScope = result?.scope === "sessions";
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         {/* ── Success State ── */}
-        {state === "success" ? (
+        {state === "success" && result ? (
           <div className="text-center py-6">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-success/10 flex items-center justify-center">
               <CheckCircle2 className="h-8 w-8 text-success" />
             </div>
             <DialogTitle className="mb-2 text-xl">
-              {redeemedProgramId ? "Program Unlocked!" : "XP Awarded!"}
+              {isSessionScope ? "Modules Unlocked!" : result.program_id ? "Program Unlocked!" : "Code Redeemed!"}
             </DialogTitle>
-            <DialogDescription className="mb-2">
-              {redeemedProgramId ? (
-                <>You now have full access to{" "}
-                  <span className="font-semibold text-foreground">{redeemedProgramTitle}</span>.
-                </>
-              ) : (
-                <span className="font-semibold text-foreground text-lg">{redeemedProgramTitle}</span>
-              )}
+            <DialogDescription className="mb-3">
+              {isSessionScope
+                ? `You now have access to ${moduleCount} module${moduleCount !== 1 ? "s" : ""}.`
+                : result.program_id
+                  ? "You now have full access to this program."
+                  : "Your reward has been applied."}
             </DialogDescription>
-            <p className="text-xs text-muted-foreground mb-6">
-              {redeemedProgramId ? "All sessions are now unlocked and ready for you." : "The XP has been added to your account."}
-            </p>
-            {redeemedProgramId ? (
+
+            {/* Module list */}
+            {isSessionScope && moduleCount > 0 && (
+              <ul className="text-left text-sm bg-muted/50 rounded-lg p-3 mb-3 space-y-1 max-h-40 overflow-y-auto">
+                {result.session_titles!.map((title, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
+                    <span>{title}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* XP reward */}
+            {result.xp_reward ? (
+              <p className="text-sm font-medium text-yellow-600 mb-2">+{result.xp_reward} XP added</p>
+            ) : null}
+
+            {/* Access expiry */}
+            {result.access_expires_at ? (
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground mb-6">
+                <Clock className="h-3.5 w-3.5" />
+                <span>Access expires in {formatExpiry(result.access_expires_at)}</span>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground mb-6">This access does not expire.</p>
+            )}
+
+            {result.program_id ? (
               <Button variant="hero" onClick={handleStartLearning} className="w-full">
                 Start Learning →
               </Button>
@@ -339,22 +270,9 @@ export const RedeemCodeModal = ({
             <DialogDescription className="mb-6 text-sm leading-relaxed">
               {errorInfo.hint}
             </DialogDescription>
-            {errorKind === "already_has_access" && redeemedProgramId ? (
-              <Button
-                variant="hero"
-                className="w-full"
-                onClick={() => {
-                  handleClose();
-                  navigate(`/programs/${redeemedProgramId}`);
-                }}
-              >
-                Go to Program
-              </Button>
-            ) : (
-              <Button variant="outline" className="w-full" onClick={handleClose}>
-                Close
-              </Button>
-            )}
+            <Button variant="outline" className="w-full" onClick={handleClose}>
+              Close
+            </Button>
           </div>
         ) : (
           /* ── Idle / Loading / Retryable Error State ── */
@@ -365,8 +283,7 @@ export const RedeemCodeModal = ({
               </div>
               <DialogTitle className="text-center">Redeem Unlock Code</DialogTitle>
               <DialogDescription className="text-center">
-                Enter the single-use code that came with your hardware kit to unlock
-                all sessions.
+                Enter the code you were given to unlock your modules.
               </DialogDescription>
             </DialogHeader>
 
@@ -391,17 +308,12 @@ export const RedeemCodeModal = ({
                   maxLength={32}
                 />
 
-                {/* Inline error feedback */}
                 {state === "error" && (
                   <div className="flex items-start gap-2 rounded-lg bg-destructive/8 border border-destructive/20 p-3">
                     <ErrorIcon className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-destructive">
-                        {errorInfo.message}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                        {errorInfo.hint}
-                      </p>
+                      <p className="text-sm font-medium text-destructive">{errorInfo.message}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{errorInfo.hint}</p>
                     </div>
                   </div>
                 )}
@@ -431,8 +343,8 @@ export const RedeemCodeModal = ({
 
             <div className="mt-4 pt-4 border-t border-border">
               <p className="text-xs text-center text-muted-foreground">
-                Each code can only be used once and binds to your account permanently.
-                Make sure you're logged into the correct account.
+                Make sure you're logged into the correct account. Access may be time-limited
+                depending on your code.
               </p>
             </div>
           </>
