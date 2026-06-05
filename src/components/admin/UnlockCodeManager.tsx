@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Key, 
   Plus, 
@@ -49,6 +50,12 @@ interface Program {
   kit_id: string;
 }
 
+interface SessionLite {
+  id: string;
+  title: string;
+  session_order: number;
+}
+
 interface UnlockCode {
   id: string;
   code: string;
@@ -59,10 +66,16 @@ interface UnlockCode {
   redeemed_at: string | null;
   expires_at: string | null;
   created_at: string;
+  scope: string;
+  access_days: number | null;
+  max_uses: number | null;
+  uses_count: number;
   program?: {
     title: string;
   };
 }
+
+type UseType = "single" | "multi" | "unlimited";
 
 export const UnlockCodeManager = () => {
   const [codes, setCodes] = useState<UnlockCode[]>([]);
@@ -75,6 +88,13 @@ export const UnlockCodeManager = () => {
   const [quantity, setQuantity] = useState(1);
   const [expiresInDays, setExpiresInDays] = useState<number | null>(null);
   const [xpReward, setXpReward] = useState<number | null>(null);
+  // v2 fields
+  const [scope, setScope] = useState<"program" | "sessions">("program");
+  const [programSessions, setProgramSessions] = useState<SessionLite[]>([]);
+  const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
+  const [accessDays, setAccessDays] = useState<number | null>(null);
+  const [useType, setUseType] = useState<UseType>("single");
+  const [maxUses, setMaxUses] = useState<number>(30);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -115,49 +135,87 @@ export const UnlockCodeManager = () => {
     return code;
   };
 
+  const handleProgramChange = async (programId: string) => {
+    setSelectedProgram(programId);
+    setSelectedSessions([]);
+    const { data } = await supabase
+      .from("sessions")
+      .select("id, title, session_order")
+      .eq("program_id", programId)
+      .order("session_order");
+    setProgramSessions((data as SessionLite[]) ?? []);
+  };
+
+  const toggleSession = (sessionId: string) => {
+    setSelectedSessions((prev) =>
+      prev.includes(sessionId) ? prev.filter((s) => s !== sessionId) : [...prev, sessionId]
+    );
+  };
+
+  const resetForm = () => {
+    setSelectedProgram("");
+    setProgramSessions([]);
+    setSelectedSessions([]);
+    setQuantity(1);
+    setExpiresInDays(null);
+    setXpReward(null);
+    setScope("program");
+    setAccessDays(null);
+    setUseType("single");
+    setMaxUses(30);
+  };
+
   const handleGenerate = async () => {
     if (!selectedProgram || !user) return;
+    if (scope === "sessions" && selectedSessions.length === 0) {
+      toast({ title: "Select modules", description: "Pick at least one module to unlock.", variant: "destructive" });
+      return;
+    }
 
     setIsGenerating(true);
-    
-    const newCodes = [];
-    const expiresAt = expiresInDays 
+
+    const expiresAt = expiresInDays
       ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString()
       : null;
+    const computedMaxUses = useType === "single" ? 1 : useType === "unlimited" ? null : Math.max(1, maxUses);
 
-    for (let i = 0; i < quantity; i++) {
-      newCodes.push({
-        code: generateCode(),
-        program_id: selectedProgram,
-        xp_reward: xpReward,
-        expires_at: expiresAt,
-        created_by: user.id,
-      });
-    }
+    const newCodes = Array.from({ length: quantity }).map(() => ({
+      code: generateCode(),
+      program_id: selectedProgram,
+      xp_reward: xpReward,
+      expires_at: expiresAt,
+      created_by: user.id,
+      scope,
+      access_days: accessDays,
+      max_uses: computedMaxUses,
+    }));
 
-    const { error } = await supabase
+    const { data: inserted, error } = await supabase
       .from("unlock_codes")
-      .insert(newCodes);
+      .insert(newCodes)
+      .select("id");
 
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to generate codes.",
-        variant: "destructive",
-      });
-    } else {
-      toast({
-        title: "Codes Generated",
-        description: `Successfully generated ${quantity} unlock code(s).`,
-      });
-      fetchData();
-      setIsDialogOpen(false);
-      setSelectedProgram("");
-      setQuantity(1);
-      setExpiresInDays(null);
-      setXpReward(null);
+    if (error || !inserted) {
+      toast({ title: "Error", description: "Failed to generate codes.", variant: "destructive" });
+      setIsGenerating(false);
+      return;
     }
 
+    // For module-scoped codes, link each new code to the chosen sessions
+    if (scope === "sessions") {
+      const links = inserted.flatMap((c) =>
+        selectedSessions.map((sid) => ({ unlock_code_id: c.id, session_id: sid }))
+      );
+      const { error: linkErr } = await supabase.from("unlock_code_sessions").insert(links);
+      if (linkErr) {
+        toast({ title: "Partial error", description: "Codes were created but module links failed.", variant: "destructive" });
+      }
+    }
+
+    toast({ title: "Codes Generated", description: `Successfully generated ${quantity} unlock code(s).` });
+    fetchData();
+    setIsDialogOpen(false);
+    resetForm();
     setIsGenerating(false);
   };
 
@@ -315,16 +373,21 @@ export const UnlockCodeManager = () => {
               <TableRow>
                 <TableHead>Code</TableHead>
                 <TableHead>Program</TableHead>
-                <TableHead>XP Reward</TableHead>
+                <TableHead>Scope</TableHead>
+                <TableHead>Access</TableHead>
+                <TableHead>Uses</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead>Deadline</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {codes.map((code) => {
                 const isExpired = code.expires_at && new Date(code.expires_at) < new Date();
+                const usesLabel = code.max_uses === null
+                  ? `${code.uses_count} / ∞`
+                  : `${code.uses_count} / ${code.max_uses}`;
+                const exhausted = code.max_uses !== null && code.uses_count >= code.max_uses;
                 return (
                   <TableRow key={code.id}>
                     <TableCell>
@@ -333,24 +396,29 @@ export const UnlockCodeManager = () => {
                       </code>
                     </TableCell>
                     <TableCell>{code.program?.title || "Unknown"}</TableCell>
-                    <TableCell>{code.xp_reward ? <Badge variant="default" className="bg-yellow-600">{code.xp_reward} XP</Badge> : "—"}</TableCell>
                     <TableCell>
-                      {code.is_used ? (
-                        <Badge variant="secondary">Redeemed</Badge>
+                      <Badge variant="outline">
+                        {code.scope === "sessions" ? "Modules" : "Program"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {code.access_days ? `${code.access_days}d` : "Permanent"}
+                    </TableCell>
+                    <TableCell className="text-sm font-mono">{usesLabel}</TableCell>
+                    <TableCell>
+                      {exhausted ? (
+                        <Badge variant="secondary">Used up</Badge>
                       ) : isExpired ? (
                         <Badge variant="destructive">Expired</Badge>
                       ) : (
                         <Badge variant="default" className="bg-green-600">Available</Badge>
                       )}
                     </TableCell>
-                    <TableCell>
-                      {code.expires_at 
+                    <TableCell className="text-sm text-muted-foreground">
+                      {code.expires_at
                         ? new Date(code.expires_at).toLocaleDateString()
-                        : "Never"
+                        : "—"
                       }
-                    </TableCell>
-                    <TableCell>
-                      {new Date(code.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -388,17 +456,17 @@ export const UnlockCodeManager = () => {
 
       {/* Generate Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[460px] max-h-[88vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Generate Unlock Codes</DialogTitle>
             <DialogDescription>
-              Create new single-use codes for program access.
+              Create scoped, time-boxed access codes for your students.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Program</Label>
-              <Select value={selectedProgram} onValueChange={setSelectedProgram}>
+              <Select value={selectedProgram} onValueChange={handleProgramChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a program..." />
                 </SelectTrigger>
@@ -411,24 +479,98 @@ export const UnlockCodeManager = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Scope */}
             <div className="space-y-2">
-              <Label>Quantity</Label>
+              <Label>What does this code unlock?</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant={scope === "program" ? "default" : "outline"} size="sm" onClick={() => setScope("program")}>
+                  Whole program
+                </Button>
+                <Button type="button" variant={scope === "sessions" ? "default" : "outline"} size="sm" onClick={() => setScope("sessions")}>
+                  Specific modules
+                </Button>
+              </div>
+            </div>
+
+            {/* Module checklist */}
+            {scope === "sessions" && (
+              <div className="space-y-2">
+                <Label>Modules to unlock</Label>
+                {!selectedProgram ? (
+                  <p className="text-xs text-muted-foreground">Select a program first.</p>
+                ) : programSessions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">This program has no sessions yet.</p>
+                ) : (
+                  <div className="max-h-44 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                    {programSessions.map((s) => (
+                      <label key={s.id} className="flex items-center gap-2 p-2 text-sm cursor-pointer hover:bg-muted/50">
+                        <Checkbox checked={selectedSessions.includes(s.id)} onCheckedChange={() => toggleSession(s.id)} />
+                        <span>{s.session_order}. {s.title}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">{selectedSessions.length} module(s) selected.</p>
+              </div>
+            )}
+
+            {/* Access duration (rolling per-student) */}
+            <div className="space-y-2">
+              <Label>Access duration (days)</Label>
               <Input
                 type="number"
-                value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                value={accessDays ?? ""}
+                onChange={(e) => setAccessDays(e.target.value ? parseInt(e.target.value) : null)}
+                placeholder="Permanent"
                 min={1}
-                max={100}
               />
+              <p className="text-xs text-muted-foreground">
+                Days of access each student gets <em>after they redeem</em>. Empty = never expires.
+              </p>
             </div>
+
+            {/* Uses */}
             <div className="space-y-2">
-              <Label>Expires In (days)</Label>
+              <Label>How many people can use each code?</Label>
+              <div className="grid grid-cols-3 gap-2">
+                <Button type="button" variant={useType === "single" ? "default" : "outline"} size="sm" onClick={() => setUseType("single")}>
+                  Single-use
+                </Button>
+                <Button type="button" variant={useType === "multi" ? "default" : "outline"} size="sm" onClick={() => setUseType("multi")}>
+                  Multi-use
+                </Button>
+                <Button type="button" variant={useType === "unlimited" ? "default" : "outline"} size="sm" onClick={() => setUseType("unlimited")}>
+                  Unlimited
+                </Button>
+              </div>
+              {useType === "multi" && (
+                <Input
+                  type="number"
+                  value={maxUses}
+                  onChange={(e) => setMaxUses(parseInt(e.target.value) || 2)}
+                  min={2}
+                  placeholder="Max redemptions"
+                />
+              )}
+              <p className="text-xs text-muted-foreground">
+                {useType === "single"
+                  ? "One student per code — generate a batch for a class."
+                  : useType === "multi"
+                    ? `Up to ${maxUses} different students can redeem the same code.`
+                    : "Anyone with the code can redeem it — no limit."}
+              </p>
+            </div>
+
+            {/* Redemption deadline (hard stop on the code itself) */}
+            <div className="space-y-2">
+              <Label>Redemption deadline (days)</Label>
               <div className="flex gap-2">
                 <Input
                   type="number"
                   value={expiresInDays || ""}
                   onChange={(e) => setExpiresInDays(e.target.value ? parseInt(e.target.value) : null)}
-                  placeholder="Never"
+                  placeholder="No deadline"
                   min={1}
                 />
                 <div className="flex items-center">
@@ -436,9 +578,11 @@ export const UnlockCodeManager = () => {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Leave empty for codes that never expire.
+                How long the code stays redeemable. Different from access duration above.
               </p>
             </div>
+
+            {/* XP reward */}
             <div className="space-y-2">
               <Label>XP Reward (optional)</Label>
               <Input
@@ -449,7 +593,22 @@ export const UnlockCodeManager = () => {
                 min={1}
               />
               <p className="text-xs text-muted-foreground">
-                If set, redeeming this code awards XP instead of (or in addition to) program access.
+                If set, redeeming also awards this much XP.
+              </p>
+            </div>
+
+            {/* Quantity */}
+            <div className="space-y-2">
+              <Label>Quantity</Label>
+              <Input
+                type="number"
+                value={quantity}
+                onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                min={1}
+                max={500}
+              />
+              <p className="text-xs text-muted-foreground">
+                For single-use, generate one per student. For multi-use/unlimited, usually 1 shared code.
               </p>
             </div>
           </div>
@@ -457,10 +616,10 @@ export const UnlockCodeManager = () => {
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button 
-              variant="hero" 
+            <Button
+              variant="hero"
               onClick={handleGenerate}
-              disabled={!selectedProgram || isGenerating}
+              disabled={!selectedProgram || isGenerating || (scope === "sessions" && selectedSessions.length === 0)}
             >
               {isGenerating ? (
                 <>
