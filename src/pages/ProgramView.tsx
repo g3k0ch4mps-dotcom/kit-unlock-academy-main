@@ -95,6 +95,10 @@ export const ProgramView = () => {
    const [sessions, setSessions] = useState<SessionData[]>([]);
   const [progressData, setProgressData] = useState<SessionProgress[]>([]);
   const [hasAccess, setHasAccess] = useState(false);
+  // Per-session access grants (from codes): session_id -> expires_at | null (null = permanent)
+  const [sessionAccess, setSessionAccess] = useState<Record<string, string | null>>({});
+  // Whole-program grant expiry (null = permanent / none)
+  const [programAccessExpiresAt, setProgramAccessExpiresAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [programTest, setProgramTest] = useState<ProgramTest | null>(null);
    const [hasPassed, setHasPassed] = useState(false);
@@ -120,8 +124,9 @@ export const ProgramView = () => {
       if (programTestResult.data) setProgramTest(programTestResult.data);
 
       if (user) {
-        const [accessResult, progressResult, passedResult, assessmentResult, scoresResult, certResult, xpData] = await Promise.all([
-          supabase.from("user_program_access").select("id").eq("program_id", id).eq("user_id", user.id).maybeSingle(),
+        const [accessResult, sessionAccessResult, progressResult, passedResult, assessmentResult, scoresResult, certResult, xpData] = await Promise.all([
+          supabase.from("user_program_access").select("id, expires_at").eq("program_id", id).eq("user_id", user.id).maybeSingle(),
+          supabase.from("user_session_access").select("session_id, expires_at").eq("user_id", user.id),
           supabase.from("session_progress").select("session_id, completed").eq("user_id", user.id),
           supabase.from("test_attempts").select("passed, program_tests!inner(program_id)").eq("user_id", user.id).eq("passed", true).eq("program_tests.program_id", id).limit(1),
           supabase.from("user_assessments").select("skill_level").eq("user_id", user.id).eq("program_id", id).maybeSingle(),
@@ -130,7 +135,22 @@ export const ProgramView = () => {
           getUserXP(user.id),
         ]);
 
-        setHasAccess(!!accessResult.data);
+        // Whole-program grant is active if there's no expiry or it's in the future
+        const nowMs = Date.now();
+        const progExpiry = accessResult.data?.expires_at ?? null;
+        const programActive = !!accessResult.data && (!progExpiry || new Date(progExpiry).getTime() > nowMs);
+        setHasAccess(programActive);
+        setProgramAccessExpiresAt(programActive ? progExpiry : null);
+
+        // Active per-session grants only (drop expired ones)
+        const accessMap: Record<string, string | null> = {};
+        for (const row of sessionAccessResult.data ?? []) {
+          if (!row.expires_at || new Date(row.expires_at).getTime() > nowMs) {
+            accessMap[row.session_id] = row.expires_at;
+          }
+        }
+        setSessionAccess(accessMap);
+
         if (progressResult.data) setProgressData(progressResult.data);
         setHasPassed(!!(passedResult.data && passedResult.data.length > 0));
         setHasCertificate(!!(certResult.data && certResult.data.length > 0));
@@ -413,7 +433,14 @@ export const ProgramView = () => {
                   const SessionIcon = getSessionIcon("tutorial");
                   const hasProgress = progressData.some(p => p.session_id === session.id);
                   const isCompleted = progressData.some(p => p.session_id === session.id && p.completed);
-                  const isLocked = !session.is_free && !hasAccess;
+                  // Accessible via: free, an active whole-program grant, or an active per-session grant
+                  const hasSessionGrant = Object.prototype.hasOwnProperty.call(sessionAccess, session.id);
+                  const isLocked = !session.is_free && !hasAccess && !hasSessionGrant;
+                  // Access expiry shown to the learner: session grant first, else the program grant
+                  const grantExpiry = hasSessionGrant ? sessionAccess[session.id] : (hasAccess ? programAccessExpiresAt : null);
+                  const daysLeft = grantExpiry
+                    ? Math.max(0, Math.ceil((new Date(grantExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+                    : null;
                   const xpCost = session.xp_cost ?? 0;
                   const alreadyUnlocked = hasProgress;
                   const prevSession = index > 0 ? sessions[index - 1] : null;
@@ -465,6 +492,14 @@ export const ProgramView = () => {
                          {session.is_free && (
                           <span className="text-xs font-medium text-accent-foreground bg-accent/50 px-2 py-0.5 rounded-full">
                             Free Preview
+                          </span>
+                        )}
+                        {daysLeft !== null && !isLocked && (
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                            daysLeft <= 1 ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"
+                          }`}>
+                            <Clock className="h-3 w-3" />
+                            {daysLeft === 0 ? "Expires today" : `${daysLeft}d left`}
                           </span>
                         )}
                       </div>
