@@ -9,8 +9,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Model is overridable via the GEMINI_MODEL secret (no code change needed if
+// Google retires/renames a model). gemini-1.5-flash was deprecated in 2025.
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
 const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const SYSTEM_PROMPT = `You are an AI learning assistant for Mamuza Engineering, a hands-on STEM learning platform for IoT and Robotics in Africa (Kenya). Your name is Mamuza AI.
 
