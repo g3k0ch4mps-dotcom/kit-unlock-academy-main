@@ -156,6 +156,31 @@ export const Dashboard = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Access grants (from time-boxed codes) expiring within a week
+  const { data: expiringAccess } = useQuery({
+    queryKey: ["expiring-access", user?.id],
+    queryFn: async () => {
+      const nowMs = Date.now();
+      const horizon = nowMs + 7 * 24 * 60 * 60 * 1000;
+      const [sess, prog] = await Promise.all([
+        supabase.from("user_session_access").select("expires_at").eq("user_id", user!.id).not("expires_at", "is", null),
+        supabase.from("user_program_access").select("expires_at").eq("user_id", user!.id).not("expires_at", "is", null),
+      ]);
+      let count = 0;
+      let soonest: number | null = null;
+      for (const r of [...(sess.data ?? []), ...(prog.data ?? [])]) {
+        const t = new Date(r.expires_at as string).getTime();
+        if (t > nowMs && t <= horizon) {
+          count++;
+          if (soonest === null || t < soonest) soonest = t;
+        }
+      }
+      return soonest ? { count, soonest } : null;
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Refresh XP data when returning to this page
   useEffect(() => {
     const handleFocus = () => {
@@ -256,7 +281,32 @@ export const Dashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
+      {/* Expiring access banner */}
+      {expiringAccess && (
+        <div className="container pt-4">
+          {(() => {
+            const days = Math.max(0, Math.ceil((expiringAccess.soonest - Date.now()) / (1000 * 60 * 60 * 24)));
+            return (
+              <div className="flex items-center gap-3 rounded-xl border border-warning/40 bg-warning/5 px-4 py-3">
+                <Clock className="h-5 w-5 text-warning flex-shrink-0" />
+                <p className="text-sm flex-1">
+                  <span className="font-semibold">
+                    {expiringAccess.count} item{expiringAccess.count !== 1 ? "s" : ""} of your access
+                    {" "}{days === 0 ? "expire today" : `expire in ${days} day${days !== 1 ? "s" : ""}`}.
+                  </span>{" "}
+                  <span className="text-muted-foreground">Redeem a new code to keep your modules unlocked.</span>
+                </p>
+                <Button variant="outline" size="sm" onClick={() => setIsRedeemModalOpen(true)}>
+                  <Key className="h-4 w-4 mr-2" />
+                  Redeem
+                </Button>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       <main className="container py-8">
         {/* Welcome Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
