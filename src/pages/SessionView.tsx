@@ -176,7 +176,10 @@ export const SessionView = () => {
               .filter((p) => p.completed)
               .map((p) => p.session_id)
           );
+          // Can OPEN: free, program access, or a session grant.
           const isAccessible = (s: SessionData) => s.is_free || programActive || grantSet.has(s.id);
+          // Counts as a PREREQUISITE only if granted (program or session) — free intros don't block.
+          const isGranted = (s: SessionData) => programActive || grantSet.has(s.id);
 
           if (!isAccessible(sessionData)) {
             toast({ title: "Locked", description: "You don't have access to this module.", variant: "destructive" });
@@ -185,7 +188,7 @@ export const SessionView = () => {
           }
 
           const earlierBlocked = (allSessionsResult.data as SessionData[]).some(
-            (s) => s.session_order < sessionData.session_order && isAccessible(s) && !completedSet.has(s.id)
+            (s) => s.session_order < sessionData.session_order && isGranted(s) && !completedSet.has(s.id)
           );
           if (earlierBlocked) {
             toast({

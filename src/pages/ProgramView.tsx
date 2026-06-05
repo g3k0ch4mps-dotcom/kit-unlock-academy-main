@@ -443,16 +443,17 @@ export const ProgramView = () => {
                     : null;
                   const xpCost = session.xp_cost ?? 0;
                   const alreadyUnlocked = hasProgress;
-                  // Sequential rule: every EARLIER module the student can access must be
-                  // completed first. Accessible = free, active program grant, or active
-                  // session grant. Non-accessible modules are skipped (not required), so a
-                  // {2,6,9} code becomes 2 -> 6 -> 9, while full access stays 1 -> 2 -> 3.
-                  const earlierAccessibleIncomplete = sessions.some((s, i) =>
+                  // Sequential rule: every EARLIER module the student has a GRANT for
+                  // (whole-program access or a per-session grant) must be completed first.
+                  // Free intros are openable but never block a granted module. So a {2,6,9}
+                  // code becomes 2 -> 6 -> 9, a {12} code opens directly, and full-program
+                  // access stays 1 -> 2 -> 3 (the program grant covers every session).
+                  const earlierGrantedIncomplete = sessions.some((s, i) =>
                     i < index &&
-                    (s.is_free || hasAccess || Object.prototype.hasOwnProperty.call(sessionAccess, s.id)) &&
+                    (hasAccess || Object.prototype.hasOwnProperty.call(sessionAccess, s.id)) &&
                     !progressData.some(p => p.session_id === s.id && p.completed)
                   );
-                  const needsPrevGate = !alreadyUnlocked && !session.is_free && earlierAccessibleIncomplete;
+                  const needsPrevGate = !alreadyUnlocked && !session.is_free && earlierGrantedIncomplete;
                   // Needs XP unlock if: not locked by program access, has xp_cost, and not already started
                   const needsXp = !isLocked && xpCost > 0 && !alreadyUnlocked;
                   // Can afford XP unlock
