@@ -1,13 +1,33 @@
-import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Max-Age": "86400",
-};
+// Allowed origins for CORS
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "http://localhost:8080,http://localhost:5173")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+function isAllowedOrigin(origin: string): boolean {
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  try {
+    const { hostname, protocol } = new URL(origin);
+    return protocol === "https:" && (hostname === "lovable.app" || hostname.endsWith(".lovable.app"));
+  } catch {
+    return false;
+  }
+}
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") ?? "";
+  const allowOrigin = isAllowedOrigin(origin) ? origin : "";
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  };
+}
 
 interface QuizQuestion {
   id: string;
@@ -17,15 +37,29 @@ interface QuizQuestion {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    const authHeader = req.headers.get("Authorization");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Validate auth
+    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
+    const token = authHeader?.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { sessionId } = await req.json();
 
     if (!sessionId) {
@@ -37,11 +71,6 @@ serve(async (req) => {
         }
       );
     }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
-    );
 
     // Fetch content blocks
     const { data: blocks, error: blocksError } = await supabase
@@ -66,11 +95,11 @@ serve(async (req) => {
     const contentText = blocks
       .map(
         (b: any) =>
-          `${b.title || "Untitled"}: ${b.content?.substring(0, 200) || ""}`
+          `${b.title || "Untitled"}: ${b.content?.substring(0, 300) || ""}`
       )
-      .join("\n");
+      .join("\n\n");
 
-    // Call Gemini API
+    // Get Gemini API key
     const apiKey = Deno.env.get("GOOGLE_API_KEY");
     if (!apiKey) {
       return new Response(
@@ -82,13 +111,20 @@ serve(async (req) => {
       );
     }
 
-    const prompt = `Generate 8-10 multiple-choice quiz questions from this content:
+    const prompt = `You are an educational expert. Generate 8-10 high-quality multiple-choice quiz questions from this learning content.
 
-${contentText}
+Each question must have:
+- A clear question text
+- Exactly 4 options
+- One correct answer
 
-Return ONLY valid JSON array (no markdown):
-[{"id":"q1","question":"?","options":["A","B","C","D"],"correct_index":0}]`;
+Return ONLY valid JSON array (no markdown, no code blocks):
+[{"id":"q1","question":"Question text?","options":["Option A","Option B","Option C","Option D"],"correct_index":0}]
 
+Content:
+${contentText}`;
+
+    // Call Gemini API
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
       {
@@ -104,7 +140,7 @@ Return ONLY valid JSON array (no markdown):
       const err = await geminiRes.text();
       console.error("Gemini error:", err);
       return new Response(
-        JSON.stringify({ error: `Gemini API error: ${geminiRes.status}` }),
+        JSON.stringify({ error: `Gemini API failed: ${geminiRes.status}` }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -118,8 +154,9 @@ Return ONLY valid JSON array (no markdown):
 
     const jsonMatch = responseText.match(/\[\s*{[\s\S]*}\s*\]/);
     if (!jsonMatch) {
+      console.error("Could not parse response:", responseText);
       return new Response(
-        JSON.stringify({ error: "Could not parse Gemini response" }),
+        JSON.stringify({ error: "Invalid response format from AI" }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -129,7 +166,7 @@ Return ONLY valid JSON array (no markdown):
 
     const questions: QuizQuestion[] = JSON.parse(jsonMatch[0]);
 
-    // Save to DB
+    // Save to database
     const { data: existingQuiz } = await supabase
       .from("session_quizzes")
       .select("id")
@@ -183,7 +220,10 @@ Return ONLY valid JSON array (no markdown):
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        },
       }
     );
   }
