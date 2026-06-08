@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.24.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,7 +58,7 @@ serve(async (req) => {
       );
     }
 
-    // ── Build content for Claude ───────────────────────────────────────────
+    // ── Build content for Gemini ──────────────────────────────────────────
     const contentSections = blocks
       .map((block: ContentBlock) => {
         let section = "";
@@ -92,28 +91,51 @@ IMPORTANT: Return ONLY a valid JSON array with this exact structure. Do not incl
 Content to analyze:
 ${contentSections}`;
 
-    // ── Call Claude API ────────────────────────────────────────────────────
-    const client = new Anthropic();
+    // ── Call Gemini API ───────────────────────────────────────────────────
+    const apiKey = Deno.env.get("GOOGLE_API_KEY");
+    if (!apiKey) {
+      throw new Error("GOOGLE_API_KEY environment variable not set");
+    }
 
-    const message = await client.messages.create({
-      model: "claude-opus-4-1",
-      max_tokens: 2048,
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error("Gemini API error:", error);
+      throw new Error(`Gemini API failed: ${response.statusText}`);
+    }
+
+    const data = await response.json();
 
     const responseText =
-      message.content[0].type === "text" ? message.content[0].text : "";
+      data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    if (!responseText) {
+      throw new Error("Empty response from Gemini API");
+    }
 
     // ── Parse JSON response ────────────────────────────────────────────────
     const jsonMatch = responseText.match(/\[\s*{[\s\S]*}\s*\]/);
     if (!jsonMatch) {
       console.error("Failed to extract JSON from response:", responseText);
-      throw new Error("Invalid JSON response from Claude");
+      throw new Error("Invalid JSON response from Gemini");
     }
 
     const questions: QuizQuestion[] = JSON.parse(jsonMatch[0]);
@@ -126,7 +148,7 @@ ${contentSections}`;
         q.options.length !== 4 ||
         typeof q.correct_index !== "number"
       ) {
-        throw new Error("Invalid question structure from Claude");
+        throw new Error("Invalid question structure from Gemini");
       }
     }
 
