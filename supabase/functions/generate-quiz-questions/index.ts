@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
@@ -24,7 +25,10 @@ interface QuizQuestion {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
   }
 
   try {
@@ -33,7 +37,10 @@ serve(async (req) => {
     if (!sessionId) {
       return new Response(
         JSON.stringify({ error: "sessionId required" }),
-        { status: 400, headers: corsHeaders }
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
@@ -54,7 +61,10 @@ serve(async (req) => {
     if (!blocks || blocks.length === 0) {
       return new Response(
         JSON.stringify({ error: "No content blocks found for session" }),
-        { status: 404, headers: corsHeaders }
+        {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
@@ -205,7 +215,10 @@ ${contentSections}`;
       JSON.stringify({
         error: error instanceof Error ? error.message : "Unknown error",
       }),
-      { status: 500, headers: corsHeaders }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
     );
   }
 });
