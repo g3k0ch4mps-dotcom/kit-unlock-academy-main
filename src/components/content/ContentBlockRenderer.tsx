@@ -178,7 +178,7 @@ export const ContentBlockRenderer = ({ block }: ContentBlockRendererProps) => {
               <ProtectedContent>
                 <div className="text-sm text-foreground">
                   <span className="font-semibold text-warning">Safety Note: </span>
-                  {block.content}
+                  <FormattedText content={block.content || ""} />
                 </div>
               </ProtectedContent>
             </div>
@@ -193,7 +193,7 @@ export const ContentBlockRenderer = ({ block }: ContentBlockRendererProps) => {
               <ProtectedContent>
                 <div className="text-sm text-foreground">
                   <span className="font-semibold text-accent-foreground">Tip: </span>
-                  {block.content}
+                  <FormattedText content={block.content || ""} />
                 </div>
               </ProtectedContent>
             </div>
@@ -217,7 +217,7 @@ export const ContentBlockRenderer = ({ block }: ContentBlockRendererProps) => {
             )}
             {block.content && (
               <ProtectedContent className="p-4 text-sm text-muted-foreground">
-                {block.content}
+                <FormattedText content={block.content} />
               </ProtectedContent>
             )}
           </div>
