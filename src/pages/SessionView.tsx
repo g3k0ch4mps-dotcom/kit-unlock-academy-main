@@ -117,7 +117,7 @@ const StepBar = ({
     <div className="sm:hidden space-y-2">
       <div className="flex items-center justify-between text-sm">
         <span className="text-muted-foreground">
-          Step {currentIndex + 1} of {chapters.length}
+          Chapter {currentIndex + 1} of {chapters.length}
         </span>
         <span className="font-semibold text-foreground">
           {chapters[currentIndex]?.label}
@@ -181,10 +181,10 @@ export const SessionView = () => {
 
   const isLastChapter = currentChapterIndex === activeChapters.length - 1;
 
-  // ── localStorage: restore saved step ──────────────────────────────────────
+  // ── localStorage: restore saved chapter ──────────────────────────────────────
   useEffect(() => {
     if (!sessionId || activeChapters.length === 0) return;
-    const saved = localStorage.getItem(`kit-session-step-${sessionId}`);
+    const saved = localStorage.getItem(`kit-session-chapter-${sessionId}`);
     if (saved !== null) {
       const idx = parseInt(saved, 10);
       if (!isNaN(idx) && idx < activeChapters.length) {
@@ -196,7 +196,7 @@ export const SessionView = () => {
   // ── localStorage: persist on change ───────────────────────────────────────
   useEffect(() => {
     if (!sessionId) return;
-    localStorage.setItem(`kit-session-step-${sessionId}`, String(currentChapterIndex));
+    localStorage.setItem(`kit-session-chapter-${sessionId}`, String(currentChapterIndex));
   }, [sessionId, currentChapterIndex]);
 
   const goNext = () =>
@@ -490,7 +490,7 @@ export const SessionView = () => {
     if (!error) {
       setIsMarkedComplete(false);
       setCurrentChapterIndex(0);
-      localStorage.removeItem(`kit-session-step-${sessionId}`);
+      localStorage.removeItem(`kit-session-chapter-${sessionId}`);
     }
     setIsRetrying(false);
   };
@@ -641,13 +641,13 @@ export const SessionView = () => {
           </div>
         )}
 
-        {/* Stepped chapters */}
+        {/* Stepped chapters with scrollable content */}
         {activeChapters.length > 0 && (
           <>
             <StepBar chapters={activeChapters} currentIndex={currentChapterIndex} />
 
-            {/* Chapter content — key forces re-mount for fade-in */}
-            <div key={currentChapterIndex} className="animate-in fade-in duration-300 space-y-8">
+            {/* Chapter content — all blocks in chapter visible */}
+            <div className="animate-in fade-in duration-300 space-y-8">
               {activeChapters[currentChapterIndex].blocks.map((block) => (
                 <div key={block.id} className="space-y-3">
                   <ContentBlockRenderer
@@ -711,7 +711,7 @@ export const SessionView = () => {
                 )
               ) : (
                 <Button variant="hero" onClick={goNext}>
-                  Next
+                  Next Chapter
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               )}
