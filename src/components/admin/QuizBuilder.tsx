@@ -24,6 +24,7 @@ import {
   Save,
   Loader2,
   HelpCircle,
+  Sparkles,
 } from "lucide-react";
 
 interface Program {
@@ -54,6 +55,7 @@ export const QuizBuilder = () => {
   const [passingScore, setPassingScore] = useState(70);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [existingQuizId, setExistingQuizId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -144,6 +146,40 @@ export const QuizBuilder = () => {
           : q
       )
     );
+  };
+
+  const handleGenerateQuestions = async () => {
+    if (!selectedSession) return;
+    setIsGenerating(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "generate-quiz-questions",
+        { body: { sessionId: selectedSession } }
+      );
+
+      if (error) throw error;
+
+      if (data?.questions) {
+        setQuestions(data.questions);
+        setExistingQuizId(data.quiz_id);
+        toast({
+          title: "Success!",
+          description: `Generated ${data.questions_count} questions. Review and save when ready.`,
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Failed to generate questions. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleSave = async () => {
@@ -250,6 +286,19 @@ export const QuizBuilder = () => {
               </div>
             </div>
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateQuestions}
+                disabled={isGenerating}
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-2" />
+                )}
+                Generate with AI
+              </Button>
               <Button variant="outline" size="sm" onClick={addQuestion}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Question
