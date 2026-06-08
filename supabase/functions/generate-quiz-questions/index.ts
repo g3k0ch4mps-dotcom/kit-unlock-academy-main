@@ -9,14 +9,6 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Max-Age": "86400",
 };
 
-interface ContentBlock {
-  id: string;
-  block_type: string;
-  title: string | null;
-  content: string | null;
-  image_url: string | null;
-}
-
 interface QuizQuestion {
   id: string;
   question: string;
@@ -51,7 +43,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
     );
 
-    // ── Fetch session content blocks ────────────────────────────────────────
+    // Fetch content blocks
     const { data: blocks, error: blocksError } = await supabase
       .from("content_blocks")
       .select("*")
@@ -62,7 +54,7 @@ serve(async (req) => {
 
     if (!blocks || blocks.length === 0) {
       return new Response(
-        JSON.stringify({ error: "No content blocks found for session" }),
+        JSON.stringify({ error: "No content blocks found" }),
         {
           status: 404,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -70,101 +62,74 @@ serve(async (req) => {
       );
     }
 
-    // ── Build content for Gemini ──────────────────────────────────────────
-    const contentSections = blocks
-      .map((block: ContentBlock) => {
-        let section = "";
-        if (block.title) section += `## ${block.title}\n`;
-        if (block.content) section += `${block.content}\n`;
-        if (block.block_type) section += `\n(Type: ${block.block_type})\n`;
-        return section;
-      })
-      .join("\n\n");
+    // Build content summary
+    const contentText = blocks
+      .map(
+        (b: any) =>
+          `${b.title || "Untitled"}: ${b.content?.substring(0, 200) || ""}`
+      )
+      .join("\n");
 
-    const prompt = `You are an expert educational content developer. Based on the following learning material, generate 8-10 high-quality multiple-choice quiz questions.
-
-Each question should:
-- Test understanding of key concepts
-- Have 4 options (A, B, C, D)
-- Have one clearly correct answer
-- Be appropriately challenging for the content level
-- Not overlap with other questions
-
-IMPORTANT: Return ONLY a valid JSON array with this exact structure. Do not include markdown, code blocks, or explanations:
-[
-  {
-    "id": "q1",
-    "question": "Question text here?",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
-    "correct_index": 0
-  }
-]
-
-Content to analyze:
-${contentSections}`;
-
-    // ── Call Gemini API ───────────────────────────────────────────────────
+    // Call Gemini API
     const apiKey = Deno.env.get("GOOGLE_API_KEY");
     if (!apiKey) {
-      throw new Error("GOOGLE_API_KEY environment variable not set");
+      return new Response(
+        JSON.stringify({ error: "GOOGLE_API_KEY not configured" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    const response = await fetch(
+    const prompt = `Generate 8-10 multiple-choice quiz questions from this content:
+
+${contentText}
+
+Return ONLY valid JSON array (no markdown):
+[{"id":"q1","question":"?","options":["A","B","C","D"],"correct_index":0}]`;
+
+    const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: prompt,
-                },
-              ],
-            },
-          ],
+          contents: [{ parts: [{ text: prompt }] }],
         }),
       }
     );
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("Gemini API error:", error);
-      throw new Error(`Gemini API failed: ${response.statusText}`);
+    if (!geminiRes.ok) {
+      const err = await geminiRes.text();
+      console.error("Gemini error:", err);
+      return new Response(
+        JSON.stringify({ error: `Gemini API error: ${geminiRes.status}` }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    const data = await response.json();
-
+    const geminiData = await geminiRes.json();
     const responseText =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    if (!responseText) {
-      throw new Error("Empty response from Gemini API");
-    }
-
-    // ── Parse JSON response ────────────────────────────────────────────────
     const jsonMatch = responseText.match(/\[\s*{[\s\S]*}\s*\]/);
     if (!jsonMatch) {
-      console.error("Failed to extract JSON from response:", responseText);
-      throw new Error("Invalid JSON response from Gemini");
+      return new Response(
+        JSON.stringify({ error: "Could not parse Gemini response" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const questions: QuizQuestion[] = JSON.parse(jsonMatch[0]);
 
-    // ── Validate structure ─────────────────────────────────────────────────
-    for (const q of questions) {
-      if (
-        !q.question ||
-        !Array.isArray(q.options) ||
-        q.options.length !== 4 ||
-        typeof q.correct_index !== "number"
-      ) {
-        throw new Error("Invalid question structure from Gemini");
-      }
-    }
-
-    // ── Save to session_quizzes ────────────────────────────────────────────
+    // Save to DB
     const { data: existingQuiz } = await supabase
       .from("session_quizzes")
       .select("id")
@@ -180,7 +145,6 @@ ${contentSections}`;
 
     let savedQuiz;
     if (existingQuiz) {
-      // Update existing
       const { data, error } = await supabase
         .from("session_quizzes")
         .update(quizData)
@@ -190,7 +154,6 @@ ${contentSections}`;
       if (error) throw error;
       savedQuiz = data;
     } else {
-      // Create new
       const { data, error } = await supabase
         .from("session_quizzes")
         .insert([quizData])
@@ -208,6 +171,7 @@ ${contentSections}`;
         questions,
       }),
       {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
