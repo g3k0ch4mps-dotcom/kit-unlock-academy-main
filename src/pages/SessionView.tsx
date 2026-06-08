@@ -1,22 +1,19 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
-import { Logo } from "@/components/layout/Logo";
-import { 
+import { Separator } from "@/components/ui/separator";
+import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
   Code2,
-  Play,
-  MessageCircle,
-  Lightbulb,
-   AlertTriangle,
-   Loader2,
-   Brain,
-   RefreshCw,
-   BookOpen,
-   RotateCcw
+  Loader2,
+  Brain,
+  RefreshCw,
+  BookOpen,
+  RotateCcw,
+  Clock
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -385,51 +382,59 @@ export const SessionView = () => {
            <span className="text-foreground">Session {session.session_order}</span>
         </div>
 
-        {/* Session Header */}
-        <div className="bg-card rounded-xl p-6 border border-border mb-8">
-          <div className="flex items-start justify-between gap-4 mb-4">
-            <div>
-               <span className="text-sm text-primary font-medium">Session {session.session_order}</span>
-              <h1 className="text-2xl font-bold mt-1">{session.title}</h1>
-               {session.description && (
-                 <p className="text-muted-foreground mt-2">{session.description}</p>
-               )}
-             </div>
-             <div className="flex items-center gap-3">
-               {skillLevel && (
-                 <Badge variant="outline" className="capitalize flex items-center gap-1">
-                   <Brain className="h-3 w-3" />
-                   {skillLevel}
-                 </Badge>
-               )}
-               {skillLevel && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleRegenerate}
-                    disabled={isPersonalizing}
-                    title="Regenerate personalized content"
-                    aria-label="Regenerate personalized content"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${isPersonalizing ? "animate-spin" : ""}`} />
-                  </Button>
-               )}
-               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                 <Code2 className="h-4 w-4" />
-                 {session.duration_minutes || 30} min
-               </div>
-             </div>
-           </div>
-           {isPersonalizing && (
-             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-               <Loader2 className="h-4 w-4 animate-spin" />
-               Personalizing content for your level...
-             </div>
-           )}
-         </div>
+        {/* Session Hero */}
+        <div className="mb-10">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-semibold uppercase tracking-widest text-primary">
+              Session {session.session_order}
+            </span>
+            {session.is_free && (
+              <Badge variant="secondary" className="text-xs">Free</Badge>
+            )}
+          </div>
+          <h1 className="text-3xl font-bold text-foreground mb-3">{session.title}</h1>
+          {session.description && (
+            <p className="text-muted-foreground text-base leading-relaxed max-w-2xl">
+              {session.description}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-3 mt-4">
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Clock className="h-4 w-4" />
+              <span>{session.duration_minutes || 30} min</span>
+            </div>
+            {skillLevel && (
+              <Badge variant="outline" className="capitalize flex items-center gap-1">
+                <Brain className="h-3 w-3" />
+                {skillLevel}
+              </Badge>
+            )}
+            {skillLevel && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-muted-foreground"
+                onClick={handleRegenerate}
+                disabled={isPersonalizing}
+                title="Regenerate personalized content"
+                aria-label="Regenerate personalized content"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 mr-1 ${isPersonalizing ? "animate-spin" : ""}`} />
+                <span className="text-xs">Personalize</span>
+              </Button>
+            )}
+          </div>
+          {isPersonalizing && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mt-3">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Personalizing content for your level...
+            </div>
+          )}
+        </div>
+        <Separator className="mb-10" />
 
          {/* Content Blocks */}
-        <div className="space-y-6">
+        <div className="space-y-8">
            {contentBlocks.map((block) => (
              <div key={block.id} className="space-y-3">
                <ContentBlockRenderer
