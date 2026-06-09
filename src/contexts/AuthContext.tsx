@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
           setTimeout(async () => {
             const { data: rolesData } = await supabase
@@ -60,8 +60,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } else {
           setRoles([]);
         }
-        
+
         setIsLoading(false);
+
+        // Clear URL hash after OAuth token has been processed
+        if (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session)) {
+          window.history.replaceState({}, "", window.location.pathname);
+        }
       }
     );
 
@@ -93,11 +98,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
           });
       }
-
-      // Clear URL hash after OAuth token has been processed (delay to ensure token extraction)
-      setTimeout(() => {
-        window.history.replaceState({}, "", window.location.pathname);
-      }, 100);
 
       setIsLoading(false);
     });
