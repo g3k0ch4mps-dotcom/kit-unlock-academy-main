@@ -17,7 +17,11 @@ export const Header = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, isInstructor, signOut } = useAuth();
+  // Both admins and instructors get the dashboard link; the page itself shows
+  // each role only the tabs they are allowed to use.
+  const isStaff = isAdmin || isInstructor;
+  const staffPanelLabel = isAdmin ? "Admin" : "Instructor";
 
   const isAuthenticated = !!user;
 
@@ -73,7 +77,7 @@ export const Header = () => {
               </Link>
             )
           )}
-          {isAuthenticated && isAdmin && (
+          {isAuthenticated && isStaff && (
             <Link
               to="/admin"
               className={`text-sm font-medium transition-colors hover:text-primary ${
@@ -82,7 +86,7 @@ export const Header = () => {
                   : "text-muted-foreground"
               }`}
             >
-              Admin
+              {staffPanelLabel}
             </Link>
           )}
         </nav>
@@ -112,11 +116,11 @@ export const Header = () => {
                     Rewards
                   </Link>
                 </DropdownMenuItem>
-                {isAdmin && (
+                {isStaff && (
                   <DropdownMenuItem asChild>
                     <Link to="/admin" className="cursor-pointer">
                       <Settings className="h-4 w-4 mr-2" />
-                      Admin Panel
+                      {staffPanelLabel} Panel
                     </Link>
                   </DropdownMenuItem>
                 )}
@@ -177,13 +181,13 @@ export const Header = () => {
                 </Link>
               )
             )}
-            {isAuthenticated && isAdmin && (
+            {isAuthenticated && isStaff && (
               <Link
                 to="/admin"
                 className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-muted transition-colors"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Admin Panel
+                {staffPanelLabel} Panel
               </Link>
             )}
             <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border">

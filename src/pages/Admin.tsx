@@ -24,6 +24,7 @@ import {
    Users
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { KitCard } from "@/components/admin/KitCard";
 import { AddKitDialog, EditKitDialog, DeleteKitDialog } from "@/components/admin/KitDialogs";
@@ -64,6 +65,9 @@ interface Kit {
 }
 
 export const Admin = () => {
+  // Instructors (trainers) author content; admins additionally control the
+  // governance/commerce/security surfaces (Codes, Store, Devices, Users, Roles).
+  const { isAdmin } = useAuth();
   const [kits, setKits] = useState<Kit[]>([]);
   const [deletedKits, setDeletedKits] = useState<Kit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -343,8 +347,12 @@ export const Admin = () => {
       
       <main className="container py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Manage kits, content, unlock codes, and AI-generated learning materials.</p>
+          <h1 className="text-3xl font-bold mb-2">{isAdmin ? "Admin Dashboard" : "Instructor Dashboard"}</h1>
+          <p className="text-muted-foreground">
+            {isAdmin
+              ? "Manage kits, content, unlock codes, and AI-generated learning materials."
+              : "Author kits, programs, content, and assessments, and track your learners."}
+          </p>
         </div>
 
          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -369,10 +377,12 @@ export const Admin = () => {
                <ClipboardCheck className="h-4 w-4" />
                <span className="hidden sm:inline">Tests</span>
              </TabsTrigger>
-             <TabsTrigger value="codes" className="flex items-center gap-2">
-               <Key className="h-4 w-4" />
-               <span className="hidden sm:inline">Codes</span>
-             </TabsTrigger>
+             {isAdmin && (
+               <TabsTrigger value="codes" className="flex items-center gap-2">
+                 <Key className="h-4 w-4" />
+                 <span className="hidden sm:inline">Codes</span>
+               </TabsTrigger>
+             )}
               <TabsTrigger value="ai" className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
                 <span className="hidden sm:inline">AI</span>
@@ -381,22 +391,26 @@ export const Admin = () => {
                   <HelpCircle className="h-4 w-4" />
                   <span className="hidden sm:inline">Quizzes</span>
                 </TabsTrigger>
-                <TabsTrigger value="devices" className="flex items-center gap-2">
-                   <Monitor className="h-4 w-4" />
-                   <span className="hidden sm:inline">Devices</span>
-                 </TabsTrigger>
-                 <TabsTrigger value="users" className="flex items-center gap-2">
-                   <Users className="h-4 w-4" />
-                   <span className="hidden sm:inline">Users</span>
-                 </TabsTrigger>
-                 <TabsTrigger value="roles" className="flex items-center gap-2">
-                   <Award className="h-4 w-4" />
-                   <span className="hidden sm:inline">Roles</span>
-                 </TabsTrigger>
-                 <TabsTrigger value="store" className="flex items-center gap-2">
-                   <Gift className="h-4 w-4" />
-                   <span className="hidden sm:inline">Store</span>
-                 </TabsTrigger>
+                {isAdmin && (
+                  <>
+                    <TabsTrigger value="devices" className="flex items-center gap-2">
+                      <Monitor className="h-4 w-4" />
+                      <span className="hidden sm:inline">Devices</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="users" className="flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      <span className="hidden sm:inline">Users</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="roles" className="flex items-center gap-2">
+                      <Award className="h-4 w-4" />
+                      <span className="hidden sm:inline">Roles</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="store" className="flex items-center gap-2">
+                      <Gift className="h-4 w-4" />
+                      <span className="hidden sm:inline">Store</span>
+                    </TabsTrigger>
+                  </>
+                )}
                 <TabsTrigger value="analytics" className="flex items-center gap-2">
                    <BarChart3 className="h-4 w-4" />
                    <span className="hidden sm:inline">Analytics</span>
@@ -571,9 +585,11 @@ export const Admin = () => {
            </TabsContent>
  
           {/* Codes Tab */}
-          <TabsContent value="codes">
-            <UnlockCodeManager />
-          </TabsContent>
+          {isAdmin && (
+            <TabsContent value="codes">
+              <UnlockCodeManager />
+            </TabsContent>
+          )}
 
           {/* AI Tab */}
           <TabsContent value="ai">
@@ -590,12 +606,14 @@ export const Admin = () => {
             />
           </TabsContent>
 
-           <TabsContent value="store">
-              <div className="bg-card rounded-xl border border-border p-6">
-                <h2 className="text-xl font-semibold mb-6">XP Store Management</h2>
-                <StoreManager />
-              </div>
-            </TabsContent>
+           {isAdmin && (
+             <TabsContent value="store">
+                <div className="bg-card rounded-xl border border-border p-6">
+                  <h2 className="text-xl font-semibold mb-6">XP Store Management</h2>
+                  <StoreManager />
+                </div>
+              </TabsContent>
+            )}
            {/* Analytics Tab */}
            <TabsContent value="quizzes">
              <div className="bg-card rounded-xl border border-border p-6">
@@ -603,22 +621,28 @@ export const Admin = () => {
                <QuizBuilder />
              </div>
            </TabsContent>
-           <TabsContent value="devices">
-              <div className="bg-card rounded-xl border border-border p-6">
-                <h2 className="text-xl font-semibold mb-6">Active Devices</h2>
-                <ActiveUsers />
-              </div>
-            </TabsContent>
-           <TabsContent value="users">
-              <div className="bg-card rounded-xl border border-border p-6">
-                <UserSessionManager />
-              </div>
-            </TabsContent>
-           <TabsContent value="roles">
-              <div className="bg-card rounded-xl border border-border p-6">
-                <RoleManager />
-              </div>
-            </TabsContent>
+           {isAdmin && (
+             <TabsContent value="devices">
+                <div className="bg-card rounded-xl border border-border p-6">
+                  <h2 className="text-xl font-semibold mb-6">Active Devices</h2>
+                  <ActiveUsers />
+                </div>
+              </TabsContent>
+            )}
+           {isAdmin && (
+             <TabsContent value="users">
+                <div className="bg-card rounded-xl border border-border p-6">
+                  <UserSessionManager />
+                </div>
+              </TabsContent>
+            )}
+           {isAdmin && (
+             <TabsContent value="roles">
+                <div className="bg-card rounded-xl border border-border p-6">
+                  <RoleManager />
+                </div>
+              </TabsContent>
+            )}
            <TabsContent value="analytics">
              <ProgramAnalytics />
            </TabsContent>

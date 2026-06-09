@@ -92,7 +92,7 @@ const App = () => (
                 </ProtectedRoute>
               } />
               <Route path="/admin" element={
-                <ProtectedRoute requireAdmin>
+                <ProtectedRoute requireInstructor>
                   <Admin />
                 </ProtectedRoute>
               } />
