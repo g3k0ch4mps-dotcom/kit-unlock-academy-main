@@ -32,11 +32,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Clear hash immediately if present (OAuth callback with token in hash)
-    if (window.location.hash && window.location.hash.includes('access_token')) {
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-
     // Set up auth state listener BEFORE getting session
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -67,6 +62,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         setIsLoading(false);
+
+        // Clean the OAuth token out of the URL only AFTER Supabase has parsed it
+        // and established the session (i.e. on the SIGNED_IN event). Clearing it
+        // any earlier deletes the token before detectSessionInUrl can read it.
+        if (event === "SIGNED_IN" && window.location.hash.includes("access_token")) {
+          window.history.replaceState({}, "", window.location.pathname);
+        }
       }
     );
 
