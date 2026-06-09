@@ -73,7 +73,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
         recordDeviceFingerprint(session.user.id);
         supabase
@@ -94,8 +94,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           });
       }
 
-      window.history.replaceState({}, "", window.location.pathname);
-      
+      // Clear URL hash after OAuth token has been processed (delay to ensure token extraction)
+      setTimeout(() => {
+        window.history.replaceState({}, "", window.location.pathname);
+      }, 100);
+
       setIsLoading(false);
     });
 
