@@ -32,6 +32,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Clear hash immediately if present (OAuth callback with token in hash)
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
     // Set up auth state listener BEFORE getting session
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -62,11 +67,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         setIsLoading(false);
-
-        // Clear URL hash after OAuth token has been processed
-        if (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session)) {
-          window.history.replaceState({}, "", window.location.pathname);
-        }
       }
     );
 
@@ -78,11 +78,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-
-      // Clear URL hash after processing OAuth callback
-      if (session) {
-        window.history.replaceState({}, "", window.location.pathname);
-      }
 
       if (session?.user) {
         recordDeviceFingerprint(session.user.id);
