@@ -63,11 +63,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         setIsLoading(false);
 
-        // Clean the OAuth token out of the URL only AFTER Supabase has parsed it
+        // Clean the OAuth hash out of the URL only AFTER Supabase has parsed it
         // and established the session (i.e. on the SIGNED_IN event). Clearing it
         // any earlier deletes the token before detectSessionInUrl can read it.
-        if (event === "SIGNED_IN" && window.location.hash.includes("access_token")) {
-          window.history.replaceState({}, "", window.location.pathname);
+        // Supabase strips the token itself but leaves a bare "#", so remove any
+        // leftover hash here too.
+        if (event === "SIGNED_IN" && window.location.hash) {
+          window.history.replaceState({}, "", window.location.pathname + window.location.search);
         }
       }
     );
