@@ -28,7 +28,7 @@
    name: string;
    description: string | null;
    difficulty_level: "beginner" | "intermediate" | "advanced";
-   category: "robotics" | "iot" | "electronics" | "ai_ml" | "sensors" | "automation";
+   category: "robotics" | "iot" | "electronics" | "ai_ml" | "sensors" | "automation" | "coding";
    image_url: string | null;
    components: string[];
    circuit_diagram_url: string | null;
@@ -50,6 +50,7 @@
    { value: "ai_ml", label: "AI/Machine Learning" },
    { value: "sensors", label: "Sensors" },
    { value: "automation", label: "Automation" },
+   { value: "coding", label: "Coding" },
  ];
  
  export const ProjectManager = () => {

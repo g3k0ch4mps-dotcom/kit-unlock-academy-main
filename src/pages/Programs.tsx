@@ -14,6 +14,7 @@ import {
   Bot,
   Camera,
    Lightbulb,
+   Code2,
    Loader2
 } from "lucide-react";
  import { supabase } from "@/integrations/supabase/client";
@@ -30,7 +31,7 @@ import {
    estimated_hours: number | null;
  }
 
- const categories = ["All", "robotics", "iot", "electronics", "ai_ml", "sensors", "automation"];
+ const categories = ["All", "robotics", "iot", "electronics", "ai_ml", "sensors", "automation", "coding"];
  const categoryLabels: Record<string, string> = {
    "All": "All",
    "robotics": "Robotics",
@@ -39,6 +40,7 @@ import {
    "ai_ml": "AI/ML",
    "sensors": "Sensors",
    "automation": "Automation",
+   "coding": "Coding",
  };
  const levels = ["All Levels", "beginner", "intermediate", "advanced"];
  const levelLabels: Record<string, string> = {
@@ -54,6 +56,7 @@ import {
      case "iot": return Cpu;
      case "ai_ml": return Camera;
      case "electronics": return Lightbulb;
+     case "coding": return Code2;
      default: return Cpu;
    }
  };

@@ -1220,6 +1220,7 @@ export type Database = {
         | "ai_ml"
         | "sensors"
         | "automation"
+        | "coding"
       difficulty_level: "beginner" | "intermediate" | "advanced"
       kit_category: "robotics" | "iot"
     }
@@ -1374,6 +1375,7 @@ export const Constants = {
         "ai_ml",
         "sensors",
         "automation",
+        "coding",
       ],
       difficulty_level: ["beginner", "intermediate", "advanced"],
       kit_category: ["robotics", "iot"],

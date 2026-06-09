@@ -28,7 +28,7 @@
    title: string;
    description: string | null;
    difficulty_level: "beginner" | "intermediate" | "advanced";
-   category: "robotics" | "iot" | "electronics" | "ai_ml" | "sensors" | "automation";
+   category: "robotics" | "iot" | "electronics" | "ai_ml" | "sensors" | "automation" | "coding";
    image_url: string | null;
    total_sessions: number;
    estimated_hours: number;
@@ -53,6 +53,7 @@
    { value: "ai_ml", label: "AI/Machine Learning" },
    { value: "sensors", label: "Sensors" },
    { value: "automation", label: "Automation" },
+   { value: "coding", label: "Coding" },
  ];
  
  export const ProgramManager = () => {
