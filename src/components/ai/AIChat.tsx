@@ -55,11 +55,23 @@ export const AIChat = () => {
     return () => window.removeEventListener("open-ai-chat", handleOpen);
   }, []);
 
+  // Reset all chat state whenever the signed-in user changes (login, logout, or
+  // an account switch on a shared device). This component is mounted once at the
+  // app root and never unmounts, so without this one user's conversation could
+  // linger on screen for the next user. Reload fresh history if the panel is open.
+  useEffect(() => {
+    setMessages([]);
+    setError(null);
+    if (open && user) loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
 
   const loadHistory = async () => {
+    if (!user) return;
     setIsFetchingHistory(true);
     const { data } = await supabase
       .from("chat_messages")

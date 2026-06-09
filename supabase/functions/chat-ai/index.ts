@@ -138,7 +138,19 @@ Deno.serve(async (req) => {
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      throw new Error("AI service error");
+
+      // Surface the real upstream reason instead of a generic message, so the
+      // failure is diagnosable from the UI (e.g. invalid key, unknown model).
+      let detail = errText;
+      try {
+        detail = JSON.parse(errText)?.error?.message ?? errText;
+      } catch {
+        /* not JSON — keep the raw text */
+      }
+      return new Response(
+        JSON.stringify({ error: `AI service error (Gemini ${geminiRes.status}): ${String(detail).slice(0, 300)}` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const geminiData = await geminiRes.json();
