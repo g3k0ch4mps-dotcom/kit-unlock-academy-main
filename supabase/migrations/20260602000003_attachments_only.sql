@@ -19,12 +19,14 @@ CREATE INDEX IF NOT EXISTS idx_content_block_attachments_block_id
 
 ALTER TABLE public.content_block_attachments ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Allow authenticated users to read attachments"
+DROP POLICY IF EXISTS "Allow authenticated users to read attachments" ON public.content_block_attachments;
+CREATE POLICY "Allow authenticated users to read attachments"
   ON public.content_block_attachments
   FOR SELECT
   USING (auth.role() = 'authenticated');
 
-CREATE POLICY IF NOT EXISTS "Allow admins to manage attachments"
+DROP POLICY IF EXISTS "Allow admins to manage attachments" ON public.content_block_attachments;
+CREATE POLICY "Allow admins to manage attachments"
   ON public.content_block_attachments
   FOR ALL
   USING (
