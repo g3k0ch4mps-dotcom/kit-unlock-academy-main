@@ -7,8 +7,8 @@ import DOMPurify from "dompurify";
  */
 const renderInlineFormatting = (text: string): React.ReactNode[] => {
   const parts: React.ReactNode[] = [];
-  // Match: `code`, *italic*, UPPERCASE words (3+ chars)
-  const regex = /(`[^`]+`)|(\*[^*]+\*)/g;
+  // Match (order matters): `code`, **bold**, *italic*
+  const regex = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)/g;
   let lastIndex = 0;
   let match;
 
@@ -24,8 +24,11 @@ const renderInlineFormatting = (text: string): React.ReactNode[] => {
         </code>
       );
     } else if (match[2]) {
-      // italic
-      parts.push(<em key={match.index}>{match[2].slice(1, -1)}</em>);
+      // bold (**text**)
+      parts.push(<strong key={match.index} className="font-semibold text-foreground">{match[2].slice(2, -2)}</strong>);
+    } else if (match[3]) {
+      // italic (*text*)
+      parts.push(<em key={match.index}>{match[3].slice(1, -1)}</em>);
     }
     lastIndex = match.index + match[0].length;
   }
@@ -95,12 +98,16 @@ export const FormattedText = ({ content, className = "" }: FormattedTextProps) =
       continue;
     }
 
-    if (trimmed.startsWith('-') || trimmed.startsWith('•') || trimmed.startsWith('*')) {
+    // A bullet marker (- • *) must be followed by whitespace. This is markdown-
+    // correct AND prevents a bold line like "**Note:**" (which starts with *)
+    // from being mistaken for a bullet.
+    const bulletRe = /^[-•*]\s+/;
+    if (bulletRe.test(trimmed)) {
       const listItems: React.ReactNode[] = [];
       while (i < lines.length) {
         const lt = lines[i].trim();
-        if (lt.startsWith('-') || lt.startsWith('•') || lt.startsWith('*')) {
-          const itemText = lt.replace(/^[-•*]\s*/, '');
+        if (bulletRe.test(lt)) {
+          const itemText = lt.replace(bulletRe, '');
           listItems.push(
             <li key={i} className="ml-4 mb-1 text-foreground list-disc">
               {renderInlineFormatting(itemText)}

@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Bot, X, Send, Loader2, Trash2, ChevronDown } from "lucide-react";
+import { FormattedText } from "@/components/content/FormattedText";
 
 interface Message {
   id: string;
@@ -232,13 +233,20 @@ export const AIChat = () => {
                   className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${
+                    className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm break-words ${
                       msg.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-br-sm"
+                        ? "bg-primary text-primary-foreground rounded-br-sm whitespace-pre-wrap"
                         : "bg-muted text-foreground rounded-bl-sm"
                     }`}
                   >
-                    {msg.content}
+                    {msg.role === "assistant" ? (
+                      <FormattedText
+                        content={msg.content}
+                        className="text-sm [&_p]:text-left [&_p]:mb-2 [&_p:last-child]:mb-0 [&_h3]:mt-2 [&_h4]:mt-2 [&_ul]:my-1.5 [&_ol]:my-1.5"
+                      />
+                    ) : (
+                      msg.content
+                    )}
                   </div>
                 </div>
               ))
