@@ -566,8 +566,9 @@ export const ProgramView = () => {
                       )}
                     </div>
                     
-                    {/* Watermark for content protection */}
-                    <div className="absolute bottom-2 right-4 opacity-5">
+                    {/* Watermark for content protection — must not intercept
+                        clicks, otherwise it covers the Start button. */}
+                    <div className="absolute bottom-2 right-4 opacity-5 pointer-events-none">
                       <Logo size="sm" />
                     </div>
                   </div>

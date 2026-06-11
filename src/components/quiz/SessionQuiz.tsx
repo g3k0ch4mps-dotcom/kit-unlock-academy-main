@@ -112,16 +112,16 @@ export const SessionQuiz = ({
   const generateQuiz = async () => {
     setStep("loading");
     try {
-      const { data, error } = await supabase.functions.invoke("personalize-content", {
-        body: {
-          action: "generate_session_quiz",
-          sessionId,
-          programId,
-        },
+      // Generate from the session's own content via Gemini (same provider as the
+      // AI chat). This also persists the quiz to session_quizzes, so the next
+      // load is served instantly from the predefined path above.
+      const { data, error } = await supabase.functions.invoke("generate-quiz-questions", {
+        body: { sessionId },
       });
 
       if (error) throw error;
-      if (data.questions && data.questions.length > 0) {
+      if (data?.error) throw new Error(data.error);
+      if (data?.questions && data.questions.length > 0) {
         setQuestions(data.questions);
         setQuizSource("ai");
         setCurrentQ(0);
@@ -130,12 +130,20 @@ export const SessionQuiz = ({
       } else {
         throw new Error("No questions generated");
       }
-    } catch {
-      toast({
-        title: "Error",
-        description: "Could not generate quiz. Please try again.",
-        variant: "destructive",
-      });
+    } catch (err) {
+      console.error("Quiz generation failed:", err);
+      // supabase-js wraps non-2xx responses in a FunctionsHttpError whose real
+      // body lives on .context — pull the actual message out when present.
+      let description = err instanceof Error ? err.message : "Please try again.";
+      if (err && typeof err === "object" && "context" in err) {
+        try {
+          const body = await (err as { context: Response }).context.json();
+          if (body?.error) description = body.error;
+        } catch {
+          /* keep the fallback message */
+        }
+      }
+      toast({ title: "Could not generate quiz", description, variant: "destructive" });
       onClose();
     }
   };
