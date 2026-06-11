@@ -129,8 +129,13 @@ ${contentText}`,
         },
       ],
       generationConfig: {
-        maxOutputTokens: 2048,
+        // gemini-2.5-flash is a "thinking" model: with a small token budget it
+        // spends tokens reasoning and truncates the JSON, producing unparseable
+        // output. Disable thinking and give enough room for ~10 questions.
+        maxOutputTokens: 8192,
         temperature: 0.7,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 },
       },
     });
 
@@ -176,21 +181,30 @@ ${contentText}`,
     }
 
     const geminiData = await geminiRes.json();
-    const responseText =
-      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const candidate = geminiData?.candidates?.[0];
+    const responseText = candidate?.content?.parts?.[0]?.text ?? "";
 
     if (!responseText) {
-      throw new Error("Empty response from Gemini");
+      // finishReason tells us *why* it's empty (e.g. MAX_TOKENS, SAFETY)
+      console.error("Empty Gemini response. finishReason:", candidate?.finishReason, JSON.stringify(geminiData)?.slice(0, 500));
+      throw new Error(
+        candidate?.finishReason === "MAX_TOKENS"
+          ? "The quiz was too long to generate. Try a session with less content."
+          : "Empty response from Gemini"
+      );
     }
 
-    // Extract JSON from response
-    const jsonMatch = responseText.match(/\[\s*{[\s\S]*}\s*\]/);
-    if (!jsonMatch) {
-      console.error("Could not parse JSON from Gemini response:", responseText);
+    // With responseMimeType=application/json the text is already pure JSON, but
+    // stay defensive: strip any stray code fences and pull out the array.
+    let questions: QuizQuestion[];
+    try {
+      const cleaned = responseText.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
+      const match = cleaned.match(/\[[\s\S]*\]/);
+      questions = JSON.parse(match ? match[0] : cleaned);
+    } catch {
+      console.error("Could not parse JSON from Gemini response:", responseText.slice(0, 800));
       throw new Error("Invalid response format from Gemini");
     }
-
-    const questions: QuizQuestion[] = JSON.parse(jsonMatch[0]);
 
     // Validate question structure
     for (const q of questions) {
