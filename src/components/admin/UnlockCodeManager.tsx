@@ -196,7 +196,12 @@ export const UnlockCodeManager = () => {
       .select("id");
 
     if (error || !inserted) {
-      toast({ title: "Error", description: "Failed to generate codes.", variant: "destructive" });
+      console.error("Failed to generate codes:", error);
+      toast({
+        title: "Failed to generate codes",
+        description: error?.message ?? "Unknown error. Check the console for details.",
+        variant: "destructive",
+      });
       setIsGenerating(false);
       return;
     }
@@ -208,7 +213,12 @@ export const UnlockCodeManager = () => {
       );
       const { error: linkErr } = await supabase.from("unlock_code_sessions").insert(links);
       if (linkErr) {
-        toast({ title: "Partial error", description: "Codes were created but module links failed.", variant: "destructive" });
+        console.error("Failed to link code sessions:", linkErr);
+        toast({
+          title: "Partial error",
+          description: linkErr.message ?? "Codes were created but module links failed.",
+          variant: "destructive",
+        });
       }
     }
 
