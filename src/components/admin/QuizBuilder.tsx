@@ -159,6 +159,7 @@ export const QuizBuilder = () => {
       );
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       if (data?.questions) {
         setQuestions(data.questions);
@@ -169,14 +170,20 @@ export const QuizBuilder = () => {
         });
       }
     } catch (err) {
-      toast({
-        title: "Error",
-        description:
-          err instanceof Error
-            ? err.message
-            : "Failed to generate questions. Please try again.",
-        variant: "destructive",
-      });
+      console.error("Quiz generation failed:", err);
+      // supabase-js wraps a non-2xx edge response in a FunctionsHttpError whose
+      // real body lives on .context — pull the actual message out when present.
+      let description =
+        err instanceof Error ? err.message : "Failed to generate questions. Please try again.";
+      if (err && typeof err === "object" && "context" in err) {
+        try {
+          const body = await (err as { context: Response }).context.json();
+          if (body?.error) description = body.error;
+        } catch {
+          /* keep the fallback message */
+        }
+      }
+      toast({ title: "Failed to generate questions", description, variant: "destructive" });
     } finally {
       setIsGenerating(false);
     }
