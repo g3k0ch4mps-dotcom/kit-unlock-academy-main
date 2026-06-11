@@ -103,16 +103,13 @@ Deno.serve(async (req) => {
       .join("\n");
 
     // Call Gemini to generate questions
-    const geminiRes = await fetch(`${GEMINI_URL}?key=${geminiApiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: `You are an expert educator. Generate 8-10 high-quality multiple-choice quiz questions from this learning content.
+    const geminiBody = JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `You are an expert educator. Generate 8-10 high-quality multiple-choice quiz questions from this learning content.
 
 Each question must have:
 - A clear question text
@@ -124,28 +121,55 @@ Return ONLY valid JSON array (no markdown, no explanation):
 
 Content to create questions from:
 ${contentText}`,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          maxOutputTokens: 2048,
-          temperature: 0.7,
+            },
+          ],
         },
-      }),
+      ],
+      generationConfig: {
+        maxOutputTokens: 2048,
+        temperature: 0.7,
+      },
     });
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      console.error("Gemini error:", geminiRes.status, errText);
+    // Gemini's free tier intermittently returns 503 ("model overloaded") and 429
+    // under load. These are transient, so retry a few times with exponential
+    // backoff before surfacing a failure to the user.
+    const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+    let geminiRes: Response | null = null;
+    let lastErrText = "";
+    for (let attempt = 0; attempt < 4; attempt++) {
+      geminiRes = await fetch(`${GEMINI_URL}?key=${geminiApiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: geminiBody,
+      });
+      if (geminiRes.ok) break;
 
-      if (geminiRes.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit reached. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      lastErrText = await geminiRes.text();
+      console.error(`Gemini error (attempt ${attempt + 1}):`, geminiRes.status, lastErrText);
+
+      if (!TRANSIENT_STATUSES.has(geminiRes.status)) break;
+      // Backoff between retries: 0.5s, 1s, 2s (skip the wait after the last try)
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+    }
+
+    if (!geminiRes || !geminiRes.ok) {
+      const status = geminiRes?.status ?? 500;
+      let detail = lastErrText;
+      try {
+        detail = JSON.parse(lastErrText)?.error?.message ?? lastErrText;
+      } catch {
+        /* not JSON — keep the raw text */
       }
-      throw new Error(`Gemini API error: ${geminiRes.status}`);
+      const overloaded = status === 503 || status === 429;
+      return new Response(
+        JSON.stringify({
+          error: overloaded
+            ? "The AI model is temporarily overloaded. Please try again in a moment."
+            : `AI service error (Gemini ${status}): ${String(detail).slice(0, 300)}`,
+        }),
+        { status: overloaded ? 503 : 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const geminiData = await geminiRes.json();
