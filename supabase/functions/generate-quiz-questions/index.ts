@@ -29,11 +29,14 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+    // Quizzes use their own Gemini key so their quota/rate-limits are isolated
+    // from the AI chat. Falls back to the shared GEMINI_API_KEY if the dedicated
+    // one isn't configured, so the function keeps working either way.
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY_QUIZ") ?? Deno.env.get("GEMINI_API_KEY");
 
     if (!geminiApiKey) {
       return new Response(
-        JSON.stringify({ error: "AI is not configured: GEMINI_API_KEY secret is missing." }),
+        JSON.stringify({ error: "AI is not configured: set GEMINI_API_KEY_QUIZ (or GEMINI_API_KEY) on this project." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
