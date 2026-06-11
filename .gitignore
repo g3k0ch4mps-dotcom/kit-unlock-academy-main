@@ -33,3 +33,7 @@ backups/
 
 # Local credential / scratch notes (may contain keys or passwords)
 anon.txt
+
+# Supabase CLI local state (project ref, pooler URL, linked-project info)
+supabase/.temp/
+supabase/.branches/
