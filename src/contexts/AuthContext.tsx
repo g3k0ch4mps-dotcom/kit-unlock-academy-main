@@ -8,10 +8,13 @@ interface UserRole {
   role: "admin" | "instructor" | "learner";
 }
 
+type AccountStatus = "pending" | "active" | "blocked";
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   roles: UserRole[];
+  accountStatus: AccountStatus | null;
   isLoading: boolean;
   isAdmin: boolean;
   isInstructor: boolean;
@@ -20,6 +23,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
   signInWithOAuth: (provider: "google" | "github") => Promise<{ error: Error | null }>;
+  refreshAccountStatus: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,6 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [roles, setRoles] = useState<UserRole[]>([]);
+  const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -56,9 +61,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             } else {
               setRoles((rolesData as UserRole[]) || []);
             }
+
+            await loadAccountStatus(session.user.id);
           }, 0);
         } else {
           setRoles([]);
+          setAccountStatus(null);
         }
 
         setIsLoading(false);
@@ -100,6 +108,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             } else {
               setRoles((rolesData as UserRole[]) || []);
             }
+
+            await loadAccountStatus(session.user.id);
           });
       }
 
@@ -115,6 +125,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return;
     const recheck = async () => {
       try {
+        // Account-level block takes precedence over device revocation.
+        await loadAccountStatus(user.id);
+
         const fp = await FingerprintJS.load();
         const { visitorId } = await fp.get();
         const { data } = await supabase
@@ -141,6 +154,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     window.addEventListener("focus", recheck);
     return () => window.removeEventListener("focus", recheck);
   }, [user]);
+
+  // Load the account's membership status. A blocked account is signed out
+  // immediately (RLS already denies its data; this closes the UI too).
+  const loadAccountStatus = async (userId: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("status")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    // `status` is newer than the generated types — read it dynamically.
+    const status = ((data as { status?: AccountStatus } | null)?.status) ?? null;
+    setAccountStatus(status);
+
+    if (status === "blocked") {
+      toast({
+        title: "Account blocked",
+        description: "Your access has been disabled by an administrator.",
+        variant: "destructive",
+      });
+      await supabase.auth.signOut();
+      setUser(null);
+      setSession(null);
+      setRoles([]);
+      setAccountStatus(null);
+    }
+  };
 
   const recordDeviceFingerprint = async (userId: string) => {
     try {
@@ -231,6 +271,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     setSession(null);
     setRoles([]);
+    setAccountStatus(null);
   };
 
   const resetPassword = async (email: string) => {
@@ -238,6 +279,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       redirectTo: `${window.location.origin}/reset-password`,
     });
     return { error: error as Error | null };
+  };
+
+  const refreshAccountStatus = async () => {
+    if (user) await loadAccountStatus(user.id);
   };
 
   const isAdmin = roles.some((r) => r.role === "admin");
@@ -249,6 +294,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         user,
         session,
         roles,
+        accountStatus,
         isLoading,
         isAdmin,
         isInstructor,
@@ -257,6 +303,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signOut,
         resetPassword,
         signInWithOAuth,
+        refreshAccountStatus,
       }}
     >
       {children}

@@ -118,7 +118,7 @@ export const RedeemCodeModal = ({
   onCodeRedeemed,
 }: RedeemCodeModalProps) => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshAccountStatus } = useAuth();
   const { toast } = useToast();
   const [code, setCode] = useState("");
   const [state, setState] = useState<RedeemState>("idle");
@@ -166,6 +166,9 @@ export const RedeemCodeModal = ({
 
       setResult(res);
       setState("success");
+      // Redeeming activates a pending account — refresh status so the
+      // membership gate lets the user out of the lobby immediately.
+      await refreshAccountStatus();
       onCodeRedeemed?.(res.program_id ?? null, "");
 
       toast({ title: "🎉 Code Redeemed!", description: "Your access has been unlocked." });

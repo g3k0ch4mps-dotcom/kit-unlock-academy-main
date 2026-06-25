@@ -13,7 +13,7 @@ export const ProtectedRoute = ({
   requireAdmin = false,
   requireInstructor = false 
 }: ProtectedRouteProps) => {
-  const { user, isLoading, isAdmin, isInstructor } = useAuth();
+  const { user, isLoading, isAdmin, isInstructor, accountStatus } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -29,6 +29,17 @@ export const ProtectedRoute = ({
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Membership gate: a signed-in but not-yet-activated account is held in the
+  // redeem "lobby" until it enters a valid access key. Staff bypass the gate.
+  if (
+    accountStatus === "pending" &&
+    !isAdmin &&
+    !isInstructor &&
+    location.pathname !== "/redeem"
+  ) {
+    return <Navigate to="/redeem" replace />;
   }
 
   if (requireAdmin && !isAdmin) {

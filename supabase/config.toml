@@ -6,3 +6,15 @@ project_id = "ctkctnyzyenaaaychsyr"
 # the browser blocks the request.
 [functions.chat-ai]
 verify_jwt = false
+
+# register-with-key is the invite-only signup door: the caller has NO account
+# yet, so there is no user JWT to verify — the access key itself is the
+# credential, validated inside the function. Platform JWT gate OFF.
+[functions.register-with-key]
+verify_jwt = false
+
+# revoke-user-sessions checks admin itself (reads Authorization, auth.getUser,
+# role lookup) and handles its own CORS/OPTIONS, so the platform gate must be OFF
+# to let the unauthenticated preflight through.
+[functions.revoke-user-sessions]
+verify_jwt = false
