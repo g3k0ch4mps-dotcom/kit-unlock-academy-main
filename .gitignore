@@ -34,6 +34,11 @@ backups/
 # Local credential / scratch notes (may contain keys or passwords)
 anon.txt
 
+# Internal access-control / deployment runbooks — keep local only, never push
+# (describe security architecture, project ref, rollout steps)
+docs/MEMBERSHIP_GATE.md
+docs/ACCESS_CONTROL_RUNBOOK.md
+
 # Supabase CLI local state (project ref, pooler URL, linked-project info)
 supabase/.temp/
 supabase/.branches/
